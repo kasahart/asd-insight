@@ -1,0 +1,95 @@
+.context-workbench.resizable-workbench {
+  grid-template-columns: minmax(0, 1fr) 18px var(--inspector-width, 320px);
+  grid-template-areas: 'analysis resize inspector';
+  gap: 0;
+}
+
+.inspector-resize-separator {
+  grid-area: resize;
+  align-self: stretch;
+  position: relative;
+  width: 18px;
+  min-width: 0;
+  min-height: 160px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow: visible;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  outline: none;
+}
+
+.inspector-resize-separator::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 calc(50% - 0.5px);
+  width: 1px;
+  background: var(--border);
+  opacity: 0;
+}
+
+.inspector-resize-separator::after {
+  content: '';
+  position: sticky;
+  top: 112px;
+  display: block;
+  width: 5px;
+  height: 36px;
+  margin: 100px auto 0;
+  border-radius: 3px;
+  background: var(--muted-foreground);
+  opacity: 0.5;
+}
+
+.inspector-resize-separator:is(:hover, :focus-visible)::before,
+.resizable-workbench[data-resizing='true']
+  > .inspector-resize-separator::before {
+  opacity: 1;
+}
+
+.inspector-resize-separator:is(:hover, :focus-visible)::after,
+.resizable-workbench[data-resizing='true']
+  > .inspector-resize-separator::after {
+  background: var(--primary);
+  opacity: 1;
+}
+
+.inspector-resize-separator:focus-visible::after {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+}
+
+.resizable-workbench[data-resizing='true'],
+.resizable-workbench[data-resizing='true'] * {
+  cursor: col-resize !important;
+  user-select: none;
+}
+
+.context-workbench.resizable-workbench[data-layout='stacked'] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'analysis' 'inspector';
+  gap: 18px;
+}
+
+.resizable-workbench[data-layout='stacked'] > .inspector-resize-separator {
+  display: none;
+}
+
+.resizable-workbench[data-layout='stacked'] > .context-inspector {
+  position: static;
+  max-height: min(600px, 65dvh);
+}
+
+@media (max-width: 1240px) {
+  .context-workbench.resizable-workbench {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'analysis' 'inspector';
+    gap: 18px;
+  }
+
+  .resizable-workbench > .inspector-resize-separator {
+    display: none;
+  }
+}

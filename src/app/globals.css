@@ -1,0 +1,548 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+@custom-variant dark (&:is(.dark *));
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--foreground);
+  --color-popover: var(--card);
+  --color-popover-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--secondary);
+  --color-accent-foreground: var(--foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input-border);
+  --color-ring: var(--primary);
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --font-sans: 'Inter', 'Noto Sans JP', 'Yu Gothic', system-ui, sans-serif;
+  --font-mono: 'SFMono-Regular', Consolas, monospace;
+}
+/* Local prototype: a single dark palette shared by controls and charts. */
+:root,
+.dark {
+  --background: #10161d;
+  --foreground: #e5edf5;
+  --card: #171f28;
+  --panel: #141c24;
+  --input-surface: #101820;
+  --primary: #6dd6bf;
+  --primary-foreground: #0c2823;
+  --secondary: #243342;
+  --muted: #1c2732;
+  --muted-foreground: #a7b6c6;
+  --subtle-foreground: #98a9bc;
+  --destructive: #f39a90;
+  --border: #334352;
+  --input-border: #546d81;
+  --subtle-border: #293744;
+  --cohort-a: #64d6bf;
+  --cohort-a-surface: #173831;
+  --cohort-a-border: #2c6657;
+  --cohort-b: #f2b76f;
+  --cohort-b-surface: #3a2c1c;
+  --selected-sample-color: #c5a3fa;
+  --selected-sample-surface: #29233a;
+  --selected-sample-border: #5a4775;
+  --threshold-color: #fb988c;
+  --chart-common: #a1b6c3;
+  --range-selection-color: #a0bfd8;
+  --warning: #ecc584;
+  --warning-surface: #312b1e;
+  --warning-border: #5c4b2e;
+  --error-surface: #362426;
+  --error-border: #684443;
+  --tooltip-shadow: #00000040;
+  --radius: 8px;
+  color-scheme: dark;
+}
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    margin: 0;
+    @apply bg-background text-foreground font-sans;
+    font-size: 13px;
+    -webkit-font-smoothing: antialiased;
+  }
+  button,
+  select,
+  input,
+  textarea {
+    font: inherit;
+  }
+  button {
+    cursor: pointer;
+  }
+  :focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 3px;
+  }
+}
+.app-header {
+  height: 66px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 30px;
+  gap: 15px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.brand-icon {
+  display: grid;
+  place-items: center;
+  width: 33px;
+  height: 33px;
+  background: var(--secondary);
+  border-radius: 9px;
+  color: var(--primary);
+}
+.brand strong {
+  font-size: 19px;
+  letter-spacing: -0.7px;
+}
+.brand strong > span {
+  font-weight: 400;
+  color: var(--muted-foreground);
+  margin-left: 3px;
+}
+.version {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--muted-foreground);
+  border-left: 1px solid var(--border);
+  margin-left: 8px;
+  padding-left: 15px;
+}
+.header-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.workspace {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
+  min-height: calc(100vh - 66px);
+}
+.control-panel {
+  border-right: 1px solid var(--border);
+  padding: 28px 21px;
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.panel-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--foreground);
+  margin-bottom: 2px;
+}
+.panel-heading h2 {
+  font-size: 13px;
+  font-weight: 650;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.field label {
+  font-size: 11px;
+  color: var(--muted-foreground);
+  font-weight: 600;
+}
+.field p {
+  font-size: 10px;
+  color: var(--muted-foreground);
+  line-height: 1.8;
+}
+.field [data-slot='native-select-wrapper'] {
+  width: 100%;
+}
+.field select,
+.field input {
+  background: var(--input-surface);
+  min-height: 35px;
+}
+.static-field {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--card);
+  font-family: var(--font-mono);
+}
+.cohort-box {
+  border-left: 2px solid var(--cohort-a);
+  padding: 10px 12px;
+  background: var(--cohort-a-surface);
+  border-radius: 0 7px 7px 0;
+  margin-top: -7px;
+}
+.cohort-box + .cohort-box {
+  border-color: var(--cohort-b);
+  background: var(--cohort-b-surface);
+}
+.cohort-box > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.cohort-box b {
+  font-size: 11px;
+}
+.cohort-box span {
+  font-size: 12px;
+  margin-left: 3px;
+}
+.cohort-box small {
+  display: block;
+  color: var(--muted-foreground);
+  margin: 7px 0 0 18px;
+  font-family: var(--font-mono);
+}
+.divided {
+  border-top: 1px solid var(--border);
+  padding-top: 20px;
+}
+.sidebar-foot {
+  margin-top: auto;
+  display: flex;
+  gap: 9px;
+  font-size: 10px;
+  line-height: 1.8;
+  color: var(--muted-foreground);
+  padding-top: 20px;
+}
+.sidebar-foot svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.main-panel {
+  padding: 33px 38px 25px;
+  min-width: 0;
+  max-width: 1700px;
+  width: 100%;
+  margin: 0 auto;
+}
+.page-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 27px;
+}
+.eyebrow {
+  font-size: 9px;
+  letter-spacing: 1.7px;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  margin-bottom: 9px;
+}
+h1 {
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: 1.2px;
+  line-height: 1.5;
+}
+.page-heading p {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.dataset-label {
+  font-size: 10px;
+  color: var(--muted-foreground);
+  text-align: right;
+  white-space: nowrap;
+}
+.dataset-label b {
+  font-weight: 500;
+  padding: 3px 7px;
+  background: var(--secondary);
+  margin-left: 7px;
+  border-radius: 4px;
+  color: var(--primary);
+}
+.metric-strip {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 22px;
+  padding: 23px 0;
+}
+.metric {
+  padding: 0 27px;
+  border-left: 1px solid var(--border);
+  min-width: 0;
+}
+.metric:first-child {
+  border: 0;
+}
+.metric > span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.metric > span small {
+  font-size: 9px;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+}
+.metric > strong {
+  display: block;
+  font-size: 34px;
+  line-height: 1.3;
+  letter-spacing: -1.3px;
+  font-weight: 500;
+  margin: 9px 0 3px;
+  font-variant-numeric: tabular-nums;
+}
+.metric em {
+  font-style: normal;
+  font-size: 13px;
+  margin-left: 6px;
+  color: var(--muted-foreground);
+  letter-spacing: 0;
+}
+.primary-metric strong {
+  color: var(--primary);
+}
+.metric p {
+  font-size: 10px;
+  color: var(--muted-foreground);
+}
+.chart-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 23px 24px 16px;
+}
+.chart-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.chart-heading h2 {
+  font-size: 13px;
+  font-weight: 600;
+}
+.chart-heading p {
+  font-size: 10px;
+  color: var(--muted-foreground);
+  margin-top: 4px;
+}
+.view-toggle {
+  display: flex;
+  gap: 2px;
+  background: var(--muted);
+  padding: 3px;
+  border-radius: 7px;
+}
+.view-toggle button {
+  font-size: 10px;
+  min-height: 27px;
+}
+.chart-legend {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  margin: 22px 0 12px;
+  padding-left: 6px;
+  font-size: 10px;
+  color: var(--muted-foreground);
+}
+.chart-legend > span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dot.a {
+  background: var(--cohort-a);
+}
+.dot.b {
+  background: var(--cohort-b);
+}
+.distribution-symbol {
+  display: inline-block;
+  flex-shrink: 0;
+  vertical-align: middle;
+  pointer-events: none;
+}
+.distribution-chart {
+  height: 310px !important;
+  width: 100%;
+  aspect-ratio: unset;
+  cursor: crosshair;
+}
+.axis-caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 13px 0 0 46px;
+}
+.axis-caption span {
+  color: var(--muted-foreground);
+  font-family: var(--font-sans);
+  font-size: 9px;
+}
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 10px;
+  color: var(--muted-foreground);
+  line-height: 1.8;
+  margin: 17px 1px;
+}
+.notice svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+@media (min-width: 1550px) {
+  .main-panel {
+    padding: 40px 50px;
+  }
+  .distribution-chart {
+    height: 375px !important;
+  }
+}
+@media (max-width: 1100px) {
+  .workspace {
+    grid-template-columns: 215px minmax(0, 1fr);
+  }
+  .main-panel {
+    padding: 25px 22px;
+  }
+  .control-panel {
+    padding: 25px 16px;
+  }
+  .dataset-label {
+    display: none;
+  }
+  .metric {
+    padding: 0 18px;
+  }
+  .chart-panel {
+    padding: 20px 15px 15px;
+  }
+}
+@media (max-width: 760px) {
+  .app-header {
+    height: 58px;
+    padding: 0 16px;
+  }
+  .version {
+    display: none;
+  }
+  .workspace {
+    display: flex;
+    flex-direction: column;
+  }
+  .control-panel {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 20px;
+  }
+  .panel-heading {
+    grid-column: 1/-1;
+  }
+  .sidebar-foot {
+    display: none;
+  }
+  .divided {
+    border: 0;
+    padding-top: 0;
+  }
+  .main-panel {
+    padding: 24px 16px;
+  }
+  .metric-strip {
+    padding: 17px 0;
+    grid-template-columns: 1.2fr 1fr 1fr;
+  }
+  .metric {
+    padding: 0 12px;
+  }
+  .metric > strong {
+    font-size: 27px;
+  }
+  .metric > span {
+    font-size: 9px;
+    gap: 4px;
+  }
+  .metric p {
+    font-size: 9px;
+  }
+  .metric > span small {
+    display: none;
+  }
+  h1 {
+    font-size: 23px;
+  }
+  .page-heading p {
+    font-size: 10px;
+  }
+  .chart-heading {
+    align-items: flex-start;
+  }
+  .view-toggle button {
+    font-size: 9px;
+    padding: 0 8px;
+  }
+  .distribution-chart {
+    height: 260px !important;
+  }
+  .axis-caption {
+    padding-left: 30px;
+  }
+  .axis-caption span {
+    display: none;
+  }
+  .chart-legend {
+    gap: 15px;
+    font-size: 9px;
+  }
+  .header-note {
+    font-size: 9px;
+  }
+}

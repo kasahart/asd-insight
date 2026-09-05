@@ -1,0 +1,117 @@
+/* Sort state belongs to its column; the sample destination belongs to its name. */
+.samples-table th.sortable-header {
+  position: relative;
+  padding: 0;
+}
+
+.samples-table .table-sort {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 39px;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 8px 13px;
+  gap: 7px;
+  cursor: pointer;
+}
+
+/* A wrapped neighboring heading can make the row taller than this button's
+   contents. Its own hit area still covers that entire header cell. */
+.samples-table .table-sort::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.samples-table th.sortable-header:has(.table-sort:hover) {
+  background: var(--muted);
+}
+
+.table-sort-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.table-sort-direction {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 2px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.table-sort[data-sort='none'] .table-sort-direction {
+  color: var(--muted-foreground);
+  opacity: 0.6;
+}
+
+.samples-table th:is([aria-sort='ascending'], [aria-sort='descending']) {
+  color: var(--primary);
+  background: var(--secondary);
+}
+
+.table-sort:is([data-sort='asc'], [data-sort='desc']) {
+  font-weight: 600;
+}
+
+.table-sort:focus-visible {
+  outline: none;
+}
+
+.table-sort:focus-visible::after {
+  outline: 2px solid var(--primary);
+  outline-offset: -3px;
+  border-radius: 3px;
+}
+
+.sample-distribution-link:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+.context-inspector .inspector-header,
+.inspector-sample-identity {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.inspector-sample-navigation {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
+  gap: 5px 8px;
+}
+
+.sample-distribution-link {
+  margin-left: auto;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--selected-sample-color);
+  font-size: 12px;
+  line-height: 1.5;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+
+.inspector-sample-identity .audio-sample-id {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.context-inspector .inspector-content,
+.context-inspector .audio-panel audio {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.audio-source-description {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

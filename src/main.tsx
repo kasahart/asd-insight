@@ -1,0 +1,14 @@
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import Home from './app/page';
+import './app/globals.css';
+import './app/workspace.css';
+import './app/relationships.css';
+import './app/data-loading.css';
+import './app/spectrogram.css';
+import './app/inspector-resize.css';
+import './app/audio-gain.css';
+import './app/sample-navigation.css';
+import './app/distribution-viewport.css';
+import './app/production.css';
+createRoot(document.getElementById('root')!).render(<React.StrictMode><Home /></React.StrictMode>);

@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "persistentStorage": true,
+  "downloads": true,
+  "maxBundleMiB": 128,
+  "maxTotalMiB": 256
+}

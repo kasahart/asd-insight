@@ -1,0 +1,68 @@
+.distribution-viewport-controls {
+  min-width: 0;
+  font-size: 12px;
+}
+.distribution-viewport-controls > summary {
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--foreground);
+  white-space: nowrap;
+}
+.distribution-viewport-controls[open] {
+  flex: 1 1 100%;
+}
+.distribution-viewport-fields {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.distribution-viewport-fields > label {
+  flex: 1 1 105px;
+  min-width: 0;
+  max-width: 180px;
+  display: grid;
+  gap: 3px;
+  color: var(--muted-foreground);
+}
+.distribution-viewport-fields input {
+  width: 100%;
+  min-width: 0;
+  font-size: 12px;
+  height: 30px;
+}
+.distribution-viewport-fields button {
+  height: 30px;
+  padding-inline: 9px;
+  font-size: 12px;
+}
+.distribution-viewport-controls p {
+  margin: 6px 0 0;
+}
+.distribution-viewport-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 12px;
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.distribution-viewport-notice button {
+  height: 27px;
+  padding-inline: 8px;
+  font-size: 11px;
+  margin-left: auto;
+}
+.viewport-outside-threshold {
+  color: var(--threshold-color);
+}
+.viewport-outside-sample {
+  color: var(--selected-sample-color, #c4a0ff);
+}
+.distribution-threshold-handle {
+  cursor: ew-resize;
+}

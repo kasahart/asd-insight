@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>ASD Insight | 使い方</title>
+    <link rel="icon" href="./favicon.svg" />
+    <link rel="stylesheet" href="./manual.css" />
+  </head>
+  <body>
+    <header class="guide-header">
+      <a class="brand" href="../" aria-label="ASD Insight の分析画面へ">
+        <span class="brand-mark" aria-hidden="true">◌</span>
+        <span>ASD <b>Insight</b></span>
+      </a>
+      <a class="back-link" href="../"
+        >分析画面へ <span aria-hidden="true">↗</span></a
+      >
+    </header>
+
+    <main>
+      <section class="guide-intro" aria-labelledby="guide-title">
+        <p class="eyebrow">USER GUIDE</p>
+        <h1 id="guide-title">分布を見て、気になるサンプルを確認する</h1>
+        <p class="lead">
+          データを開いてから、5つの操作で2群の分布の重なりを調べます。
+        </p>
+        <p class="usage-boundary">
+          参考・探索分析です。検査合否や運用しきい値の承認には使用しません。
+        </p>
+        <nav class="step-nav" aria-label="手順">
+          <a href="#start"><span>1</span> 開始</a>
+          <a href="#conditions"><span>2</span> 条件</a>
+          <a href="#distribution"><span>3</span> 分布</a>
+          <a href="#samples"><span>4</span> サンプル</a>
+          <a href="#save"><span>5</span> 保存</a>
+        </nav>
+      </section>
+
+      <div class="guide-steps">
+        <section class="guide-step" id="start" aria-labelledby="start-title">
+          <div class="step-copy">
+            <p class="step-number">01</p>
+            <h2 id="start-title">データを開く</h2>
+            <p>「データを選ぶ」から、CSV・TSVまたは合成デモを開きます。</p>
+            <p class="action-line">
+              <b>データを選ぶ</b> → <b>CSV・TSV</b> → ファイルを選択
+            </p>
+            <div class="schema-card" aria-label="CSV列の目安">
+              <dl>
+                <div>
+                  <dt>スコア</dt>
+                  <dd>数値</dd>
+                </div>
+                <div>
+                  <dt>群分け</dt>
+                  <dd>2値、または数値の境界</dd>
+                </div>
+                <div>
+                  <dt>サンプル / 音声</dt>
+                  <dd>任意</dd>
+                </div>
+              </dl>
+            </div>
+            <p>
+              音声は「試聴用の音声を追加」から別に選べます。音声なしでも分布の比較はできます。
+            </p>
+          </div>
+          <figure class="motion-figure">
+            <a
+              class="image-link motion-gif"
+              href="./assets/01-select-data.gif"
+              target="_blank"
+              rel="noopener"
+            >
+              <img
+                src="./assets/01-select-data.gif"
+                alt="データ選択画面で合成デモを選び、表示する操作"
+              />
+            </a>
+            <a
+              class="image-link motion-static"
+              href="./assets/01-data-source.png"
+              target="_blank"
+              rel="noopener"
+            >
+              <img
+                src="./assets/01-data-source.png"
+                alt="データを選ぶ画面で、合成デモのタブを選んだ状態"
+              />
+            </a>
+            <figcaption>合成デモを選び、表示します</figcaption>
+          </figure>
+        </section>
+
+        <section
+          class="guide-step"
+          id="conditions"
+          aria-labelledby="conditions-title"
+        >
+          <div class="step-copy">
+            <p class="step-number">02</p>
+            <h2 id="conditions-title">評価条件をそろえる</h2>
+            <p>「評価条件」で、異常度の列と群分けの列を選びます。</p>
+            <p>
+              群A・群Bに対応する実際の値を確認し、OKとして扱う基準群と、NG候補にするスコアの向きを選びます。数値で群分けする場合は、群Aの上限以下と群Bの下限以上が対象です。
+            </p>
+            <p class="semantic-note">
+              集計条件や手動除外は計算対象を変えます。一覧の範囲・名前検索・候補フィルターは表示を絞る操作です。「計算対象全体 / 一覧表示」の件数を分けて確認してください。
+            </p>
+            <p class="action-line">
+              <b>異常度</b> → <b>群分け</b> → 基準群を確認
+            </p>
+          </div>
+          <figure>
+            <a
+              class="image-link"
+              href="./assets/02-distribution.png"
+              target="_blank"
+              rel="noopener"
+            >
+              <img
+                src="./assets/02-distribution.png"
+                alt="合成デモの画面。左に評価条件、中央に分布と一覧、右に詳細を表示している"
+              />
+            </a>
+            <figcaption>評価条件・分布・一覧・詳細を同時に確認できます</figcaption>
+          </figure>
+        </section>
+
+        <section
+          class="guide-step guide-step-wide"
+          id="distribution"
+          aria-labelledby="distribution-title"
+        >
+          <div class="step-copy">
+            <p class="step-number">03</p>
+            <h2 id="distribution-title">分布としきい値を見る</h2>
+            <p>
+              分布上をドラッグすると、気になるスコアの範囲だけに一覧を絞れます。「数値で指定」でも範囲を選べます。範囲を変えても、計算対象全体のPR-AUCは変わりません。
+            </p>
+            <p>
+              「OK群のNG候補率上限（%）」を指定して仮しきい値を設定します。同点は分割しないため、実測率が指定上限より低くなる場合があります。初期値の1%は操作用の仮値です。
+            </p>
+            <p class="semantic-note">
+              しきい値は探索用の仮値です。「OK基準群のNG候補」「反対群のOK候補」は基準との不一致を示し、真の誤判定とは確定しません。
+            </p>
+            <p>
+              分布のしきい値ハンドルはドラッグや左右キーで調整できます。Escで取消できます。手動調整後は率の上限を保証しません。表示されたスコアの向きと比較演算子を確認してください。
+            </p>
+            <p class="action-line">
+              <b>ドラッグ</b> → 範囲を確認 → <b>しきい値</b>を調整
+            </p>
+          </div>
+          <div class="manual-media-stack">
+            <figure class="mini-action motion-figure">
+              <p class="mini-action-label"><span>1</span> 範囲を絞る</p>
+              <a
+                class="image-link motion-gif"
+                href="./assets/02-select-range.gif"
+                target="_blank"
+                rel="noopener"
+              >
+                <img
+                  src="./assets/02-select-range.gif"
+                  alt="合成デモの分布上で範囲をドラッグして絞り込む操作"
+                />
+              </a>
+              <a
+                class="image-link motion-static"
+                href="./assets/02-select-range-poster.png"
+                target="_blank"
+                rel="noopener"
+              >
+                <img
+                  src="./assets/02-select-range-poster.png"
+                  alt="合成デモの分布で選択範囲を指定した状態"
+                />
+              </a>
+              <figcaption>範囲選択は一覧表示に反映され、計算対象全体は変わりません</figcaption>
+            </figure>
+            <figure class="mini-action motion-figure">
+              <p class="mini-action-label"><span>2</span> しきい値を調整</p>
+              <a
+                class="image-link motion-gif"
+                href="./assets/02-select-threshold.gif"
+                target="_blank"
+                rel="noopener"
+              >
+                <img
+                  src="./assets/02-select-threshold.gif"
+                  alt="合成デモの分布上で探索用の仮しきい値を示す縦線と上端のハンドルを動かす操作（coral色）"
+                />
+              </a>
+              <a
+                class="image-link motion-static"
+                href="./assets/02-select-threshold.png"
+                target="_blank"
+                rel="noopener"
+              >
+                <img
+                  src="./assets/02-select-threshold.png"
+                  alt="合成デモの分布上にcoral色の縦線と上端のハンドルで探索用の仮しきい値を示した状態"
+                />
+              </a>
+              <figcaption>
+                仮しきい値の縦線と上端のハンドル（coral色）で調整します
+              </figcaption>
+            </figure>
+          </div>
+        </section>
+
+        <section
+          class="guide-step"
+          id="samples"
+          aria-labelledby="samples-title"
+        >
+          <div class="step-copy">
+            <p class="step-number">04</p>
+            <h2 id="samples-title">サンプルを確認する</h2>
+            <p>
+              一覧の行を選ぶと、分布上の位置とサンプル詳細が切り替わります。音声があれば再生できます。
+            </p>
+            <p>
+              名前検索は「部分一致（含む）」と「完全一致」を選べます。英字の大小は区別しません。たとえば部分一致の「normal」は「abnormal」も含むため、1つの名前を指定する場合は完全一致を使います。
+            </p>
+            <p>
+              サンプルを除外すると計算対象から外れ、指標が再計算されます。除外理由を残し、必要なら「除外のみ」から復元できます。母集団が変わった仮しきい値は再設定してください。
+            </p>
+            <p>
+              波形・スペクトログラムの表示解析はch1です。再生ゲインは解析値を変えません。原音未対応の場合は、詳細に表示される理由を確認し、必要な音声を追加してください。名前の不一致なら、表示される対応候補のファイル名と照合します。
+            </p>
+            <p class="action-line">
+              <b>行を選択</b> → 詳細を確認 → 必要ならメモ
+            </p>
+          </div>
+          <figure class="motion-figure">
+            <a
+              class="image-link motion-gif"
+              href="./assets/03-select-sample.gif"
+              target="_blank"
+              rel="noopener"
+            >
+              <img
+                src="./assets/03-select-sample.gif"
+                alt="サンプル一覧の行を選び、右の詳細と分布上の位置が切り替わる操作"
+              />
+            </a>
+            <a
+              class="image-link motion-static"
+              href="./assets/03-sample-detail.png"
+              target="_blank"
+              rel="noopener"
+            >
+              <img
+                src="./assets/03-sample-detail.png"
+                alt="サンプルを選択し、右の詳細とスペクトログラムが表示された状態"
+              />
+            </a>
+            <figcaption>
+              一覧・分布・詳細は選択中のサンプルで連動します
+            </figcaption>
+          </figure>
+        </section>
+
+        <section
+          class="guide-step guide-step-last"
+          id="save"
+          aria-labelledby="save-title"
+        >
+          <div class="step-copy">
+            <p class="step-number">05</p>
+            <h2 id="save-title">保存して再開する</h2>
+            <p>
+              画面上部の保存状態から分析を管理できます。次回は「データを選ぶ」から保存した分析を開きます。
+            </p>
+            <p>
+              同名の分析は分析ID・作成日時で区別します。「保存中」「未保存」「一時利用」「保存失敗」は「端末に保存済み」と異なる状態です。一時利用の内容はタブを閉じると失われます。
+            </p>
+            <p>
+              「分析の来歴・条件と確認用JSON」から評価条件、仮しきい値、一覧表示条件、除外・復元履歴、算定方法を確認できます。さらに「データ識別子・hash（全文）」または「確認用JSON（全文・読み取り専用）」を開くと詳しい記録を読めます。履歴が20件を超える場合、全履歴は確認用JSONに含まれます。
+            </p>
+            <p>
+              「結果JSON」は分析記録、「CSV」は現在の一覧のうち除外行を含まないデータです。元データと音声も含めて再開できるファイルを残すには「バックアップ」の.ovlab形式を使います。復元時は別の分析IDになります。
+            </p>
+            <p class="semantic-note">
+              同じブラウザープロファイルを使う人は、保存した分析を開けます。SSOは端末内データを利用者別に暗号化するものではありません。ブラウザーデータの消去で失われるため、組織の保存方針に従ってバックアップを保管してください。
+            </p>
+            <p class="action-line">
+              <b>端末に保存済み</b> → データを選ぶ → 保存した分析を開く
+            </p>
+          </div>
+          <figure>
+            <a
+              class="image-link"
+              href="./assets/05-save-reopen.png"
+              target="_blank"
+              rel="noopener"
+            >
+              <img
+                src="./assets/05-save-reopen.png"
+                alt="合成デモの画面。上部の端末に保存済みから保存した分析タブを開く流れ"
+              />
+            </a>
+            <figcaption>端末に保存済み → 保存した分析</figcaption>
+          </figure>
+        </section>
+      </div>
+    </main>
+
+    <footer class="guide-footer">
+      <a href="../">分析画面へ戻る</a>
+      <span>ASD Insight · 利用者向けガイド</span>
+    </footer>
+  </body>
+</html>

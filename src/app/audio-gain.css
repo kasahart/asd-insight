@@ -1,0 +1,42 @@
+.audio-gain-control {
+  margin: 10px 0 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.audio-gain-heading,
+.audio-gain-adjustment {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+.audio-gain-heading {
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.audio-gain-heading label {
+  color: var(--foreground);
+  font-weight: 500;
+}
+.audio-gain-heading output {
+  color: var(--foreground);
+  font-variant-numeric: tabular-nums;
+}
+.audio-gain-adjustment input[type='range'] {
+  flex: 1 1 120px;
+  min-width: 0;
+  accent-color: var(--primary);
+}
+.audio-gain-adjustment button {
+  min-height: 30px;
+}
+.audio-gain-control > p {
+  margin: 6px 0 0;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.audio-gain-control .audio-gain-warning {
+  color: var(--warning);
+}
