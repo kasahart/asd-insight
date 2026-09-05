@@ -161,9 +161,14 @@
   color: var(--muted-foreground);
   overflow-wrap: anywhere;
 }
+.metric p.pr-metric-status,
+.metric p.pr-metric-warning {
+  min-height: 1.6em;
+  line-height: 1.6;
+  margin: 5px 0;
+}
 .metric p.pr-metric-warning {
   color: var(--warning);
-  margin: 5px 0;
 }
 .info-link {
   font-size: 12px;

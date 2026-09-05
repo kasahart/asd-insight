@@ -14,6 +14,12 @@ export function PrecisionRecallMetric({
 }) {
   const { evaluation } = useThreshold();
   const { auc, positiveFraction } = evaluation;
+  const status =
+    auc === null
+      ? '両群に有効スコアが必要です。'
+      : evaluation.distinctScores === 1
+        ? '全スコア同点：順位による識別はできません。'
+        : '';
   return (
     <div className="metric primary-metric pr-metric">
       <span>
@@ -43,12 +49,17 @@ export function PrecisionRecallMetric({
         {' · '}
         {evaluation.direction === 'high' ? '高' : '低'}スコア側
       </p>
-      {auc === null && <p>両群に有効スコアが必要です。</p>}
-      {evaluation.distinctScores === 1 && auc !== null && (
-        <p className="pr-metric-warning">
-          全スコア同点：順位による識別はできません。
-        </p>
-      )}
+      <p
+        className={
+          status && evaluation.distinctScores === 1
+            ? 'pr-metric-warning'
+            : 'pr-metric-status'
+        }
+        aria-hidden={!status}
+        style={!status ? { visibility: 'hidden' } : undefined}
+      >
+        {status || '\u00a0'}
+      </p>
     </div>
   );
 }
