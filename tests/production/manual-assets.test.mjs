@@ -12,9 +12,9 @@ const manual = join(root, 'manual');
 const prepared = join(root, 'runtime', 'prepared', 'manual');
 const balancedTags = new Set(['section', 'div', 'figure', 'a']);
 const requiredWorkflowFiles = [
-  'assets/local-workflow.mp4',
+  'assets/local-workflow-clean.mp4',
   'assets/local-workflow-poster.png',
-  'assets/local-workflow.ja.vtt',
+  'assets/local-workflow-clean.ja.vtt',
   'sample/inspection.csv',
   'sample/tone.wav',
 ];
@@ -152,6 +152,7 @@ test('manual is a self-contained static bundle and prepare-static copies it exac
     'WAV音声から異常スコアを生成しません',
     '音声なし',
     '操作間の待ち時間を省いています',
+    '保存一覧は対象の分析だけを切り出し',
   ])
     assert.ok(manualText.includes(phrase), `manual text is missing: ${phrase}`);
 
@@ -169,20 +170,23 @@ test('manual is a self-contained static bundle and prepare-static copies it exac
   assert.doesNotMatch(videoAttributes, /\b(?:autoplay|loop)(?:\s|=|$)/i);
   assert.match(
     videoBody,
-    /<source\b[^>]*src="\.\/assets\/local-workflow\.mp4"[^>]*>/i,
+    /<source\b[^>]*src="\.\/assets\/local-workflow-clean\.mp4"[^>]*>/i,
   );
   const trackMatch = videoBody.match(/<track\b([^>]*)>/i);
   assert.ok(trackMatch, 'workflow video must include a subtitle track');
   const [, trackAttributes] = trackMatch;
   assert.match(trackAttributes, /\bkind="subtitles"/i);
-  assert.match(trackAttributes, /\bsrc="\.\/assets\/local-workflow\.ja\.vtt"/i);
+  assert.match(
+    trackAttributes,
+    /\bsrc="\.\/assets\/local-workflow-clean\.ja\.vtt"/i,
+  );
   assert.match(trackAttributes, /\bsrclang="ja"/i);
   assert.match(trackAttributes, /\blabel="日本語字幕"/i);
   assert.match(trackAttributes, /\bdefault(?:\s|$)/i);
-  assert.match(html, /href="\.\/assets\/local-workflow\.mp4"/i);
+  assert.match(html, /href="\.\/assets\/local-workflow-clean\.mp4"/i);
   assert.match(
     html,
-    /<a\b[^>]*href="\.\/assets\/local-workflow\.ja\.vtt"[^>]*\bdownload(?:\s|=|>)/i,
+    /<a\b[^>]*href="\.\/assets\/local-workflow-clean\.ja\.vtt"[^>]*\bdownload(?:\s|=|>)/i,
   );
   for (const path of ['./sample/inspection.csv', './sample/tone.wav']) {
     const escapedPath = path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -197,7 +201,7 @@ test('manual is a self-contained static bundle and prepare-static copies it exac
   }
 
   const subtitles = await readFile(
-    join(manual, 'assets/local-workflow.ja.vtt'),
+    join(manual, 'assets/local-workflow-clean.ja.vtt'),
     'utf8',
   );
   assert.match(subtitles, /^\uFEFF?WEBVTT(?:[ \t].*)?(?:\r?\n|$)/);
