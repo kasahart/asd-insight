@@ -12,9 +12,9 @@ const manual = join(root, 'manual');
 const prepared = join(root, 'runtime', 'prepared', 'manual');
 const balancedTags = new Set(['section', 'div', 'figure', 'a']);
 const requiredWorkflowFiles = [
-  'assets/local-workflow-clean.mp4',
+  'assets/local-workflow-guided.mp4',
   'assets/local-workflow-poster.png',
-  'assets/local-workflow-clean.ja.vtt',
+  'assets/local-workflow-guided.ja.vtt',
   'sample/inspection.csv',
   'sample/tone.wav',
 ];
@@ -139,18 +139,20 @@ test('manual is a self-contained static bundle and prepare-static copies it exac
     '判定群',
     '検査名',
     '音声名',
-    '仮しきい値を設定',
+    '探索用の仮しきい値を設定',
     '試聴用の音声を追加',
     'スペクトログラム',
     '調査メモ',
     'スコア0.7の区間をクリック',
     '計算対象全体 6件 / 一覧表示 1件',
-    '範囲を解除',
+    '一覧範囲の横の「解除」',
     '端末に保存済み',
     '再読込',
     '保存した分析',
     'WAV音声から異常スコアを生成しません',
     '音声なし',
+    '字幕に対応する枠と番号付きラベル',
+    '枠表示中は操作後の画面を静止しています',
     '操作間の待ち時間を省いています',
     '保存一覧は対象の分析だけを切り出し',
   ])
@@ -170,7 +172,7 @@ test('manual is a self-contained static bundle and prepare-static copies it exac
   assert.doesNotMatch(videoAttributes, /\b(?:autoplay|loop)(?:\s|=|$)/i);
   assert.match(
     videoBody,
-    /<source\b[^>]*src="\.\/assets\/local-workflow-clean\.mp4"[^>]*>/i,
+    /<source\b[^>]*src="\.\/assets\/local-workflow-guided\.mp4"[^>]*>/i,
   );
   const trackMatch = videoBody.match(/<track\b([^>]*)>/i);
   assert.ok(trackMatch, 'workflow video must include a subtitle track');
@@ -178,15 +180,15 @@ test('manual is a self-contained static bundle and prepare-static copies it exac
   assert.match(trackAttributes, /\bkind="subtitles"/i);
   assert.match(
     trackAttributes,
-    /\bsrc="\.\/assets\/local-workflow-clean\.ja\.vtt"/i,
+    /\bsrc="\.\/assets\/local-workflow-guided\.ja\.vtt"/i,
   );
   assert.match(trackAttributes, /\bsrclang="ja"/i);
   assert.match(trackAttributes, /\blabel="日本語字幕"/i);
   assert.match(trackAttributes, /\bdefault(?:\s|$)/i);
-  assert.match(html, /href="\.\/assets\/local-workflow-clean\.mp4"/i);
+  assert.match(html, /href="\.\/assets\/local-workflow-guided\.mp4"/i);
   assert.match(
     html,
-    /<a\b[^>]*href="\.\/assets\/local-workflow-clean\.ja\.vtt"[^>]*\bdownload(?:\s|=|>)/i,
+    /<a\b[^>]*href="\.\/assets\/local-workflow-guided\.ja\.vtt"[^>]*\bdownload(?:\s|=|>)/i,
   );
   for (const path of ['./sample/inspection.csv', './sample/tone.wav']) {
     const escapedPath = path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -201,7 +203,7 @@ test('manual is a self-contained static bundle and prepare-static copies it exac
   }
 
   const subtitles = await readFile(
-    join(manual, 'assets/local-workflow-clean.ja.vtt'),
+    join(manual, 'assets/local-workflow-guided.ja.vtt'),
     'utf8',
   );
   assert.match(subtitles, /^\uFEFF?WEBVTT(?:[ \t].*)?(?:\r?\n|$)/);
