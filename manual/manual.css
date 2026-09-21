@@ -84,6 +84,140 @@ main {
   padding: 42px 0 52px;
   max-width: 800px;
 }
+.workflow-video {
+  display: block;
+  margin-bottom: 16px;
+  padding: 34px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface) 93%, transparent);
+  scroll-margin-top: 18px;
+}
+.video-copy {
+  min-width: 0;
+}
+.video-copy > p:not(.eyebrow) {
+  color: var(--muted);
+  font-size: 14px;
+}
+.video-note {
+  margin: 18px 0 0;
+  padding: 10px 12px;
+  border-left: 2px solid var(--teal);
+  background: #102a2a;
+  color: var(--text) !important;
+  font-size: 12px !important;
+}
+.workflow-support {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+.workflow-order,
+.workflow-fixtures,
+.troubleshooting {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #3f5c6d;
+  border-radius: 9px;
+  background: #10222b;
+}
+.workflow-order h3,
+.workflow-fixtures h3,
+.troubleshooting h3 {
+  margin: 0 0 9px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.35;
+}
+.workflow-order ol,
+.troubleshooting ul {
+  margin: 0;
+  padding-left: 1.35rem;
+  color: var(--muted);
+  font-size: 13px;
+}
+.workflow-order li + li,
+.troubleshooting li + li {
+  margin-top: 8px;
+}
+.workflow-order li::marker {
+  color: var(--teal);
+  font-weight: 700;
+}
+.workflow-fixtures p,
+.troubleshooting li {
+  color: var(--muted);
+  font-size: 13px;
+}
+.workflow-fixtures p {
+  margin-bottom: 14px;
+}
+.fixture-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.download-link,
+.video-link {
+  color: var(--teal);
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.download-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 10px;
+  border: 1px solid #3f716c;
+  border-radius: 6px;
+  background: #12302f;
+  text-decoration: none;
+}
+.troubleshooting {
+  margin-top: 16px;
+  border-color: #65543a;
+  background: #2a241a;
+}
+.troubleshooting h3 {
+  color: var(--orange);
+}
+.video-figure {
+  min-width: 0;
+  margin-top: 22px;
+}
+.workflow-video a {
+  color: var(--teal);
+}
+.workflow-video-player {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1280 / 840;
+  object-fit: contain;
+  border: 1px solid #3a5365;
+  border-radius: 8px;
+  background: #0b131b;
+  box-shadow: 0 14px 35px #0004;
+}
+.workflow-video-player::cue {
+  background: #0e151de6;
+  color: #eaf1f7;
+  font-size: clamp(12px, 1.5vw, 18px);
+}
+.workflow-video figcaption {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.workflow-video a:focus-visible,
+.workflow-video-player:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
 .eyebrow {
   margin: 0 0 13px;
   color: var(--teal);
@@ -145,7 +279,9 @@ h1 {
 .step-nav a:focus-visible,
 .back-link:focus-visible,
 .brand:focus-visible,
-.guide-footer a:focus-visible {
+.guide-footer a:focus-visible,
+.download-link:focus-visible,
+.video-link:focus-visible {
   outline: 2px solid var(--teal);
   outline-offset: 4px;
   border-radius: 5px;
@@ -358,6 +494,12 @@ figcaption {
     gap: 22px;
     padding: 24px;
   }
+  .workflow-video {
+    padding: 24px;
+  }
+  .workflow-support {
+    grid-template-columns: 1fr;
+  }
   .schema-card dl {
     grid-template-columns: 1fr;
   }
@@ -385,6 +527,9 @@ figcaption {
     font-size: 31px;
   }
   .guide-step {
+    padding: 20px;
+  }
+  .workflow-video {
     padding: 20px;
   }
   .step-nav {

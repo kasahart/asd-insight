@@ -11,6 +11,40 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 const manual = join(root, 'manual');
 const prepared = join(root, 'runtime', 'prepared', 'manual');
 const balancedTags = new Set(['section', 'div', 'figure', 'a']);
+const requiredWorkflowFiles = [
+  'assets/local-workflow.mp4',
+  'assets/local-workflow-poster.png',
+  'assets/local-workflow.ja.vtt',
+  'sample/inspection.csv',
+  'sample/tone.wav',
+];
+
+function vttTimestampMs(value) {
+  const parts = value.split(':');
+  const seconds = Number(parts.pop());
+  const minutes = Number(parts.pop());
+  const hours = parts.length ? Number(parts.pop()) : 0;
+  assert.equal(parts.length, 0, `invalid WebVTT timestamp: ${value}`);
+  assert.ok(
+    Number.isInteger(hours) && Number.isInteger(minutes) && Number.isFinite(seconds),
+    `invalid WebVTT timestamp: ${value}`,
+  );
+  assert.ok(minutes >= 0 && minutes < 60, `invalid WebVTT minutes: ${value}`);
+  assert.ok(seconds >= 0 && seconds < 60, `invalid WebVTT seconds: ${value}`);
+  return (hours * 60 * 60 + minutes * 60 + seconds) * 1000;
+}
+
+function htmlTextContent(html) {
+  return html
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 function assertManualMarkupBalanced(html) {
   const stack = [];
@@ -56,6 +90,8 @@ test('manual is a self-contained static bundle and prepare-static copies it exac
   assert.ok(sourceFiles.includes('assets/02-select-threshold.gif'));
   assert.ok(sourceFiles.includes('assets/02-select-threshold.png'));
   assert.ok(sourceFiles.includes('assets/05-save-reopen.png'));
+  for (const path of requiredWorkflowFiles)
+    assert.ok(sourceFiles.includes(path), `manual is missing ${path}`);
   assert.deepEqual(preparedFiles, sourceFiles);
   for (const path of sourceFiles) {
     assert.deepEqual(
@@ -86,8 +122,140 @@ test('manual is a self-contained static bundle and prepare-static copies it exac
   assert.match(html, /05-save-reopen\.png/);
   assert.match(html, /探索用の仮しきい値を示す縦線と上端のハンドル/);
   assert.match(html, /仮しきい値の縦線と上端のハンドル（coral色）/);
+
+  assert.match(html, /id="video"/);
+  assert.match(html, /href="#video"/);
+  assert.match(html, /inspection\.csv/);
+  assert.match(html, /tone\.wav/);
+  const manualText = htmlTextContent(html);
+  for (const phrase of [
+    'データを選ぶ',
+    'CSV・TSV',
+    'このデータを表示',
+    '評価する異常度の列',
+    '群分けに使う列',
+    'サンプル名に使う列',
+    '音声のファイル名・パス列',
+    '判定群',
+    '検査名',
+    '音声名',
+    '仮しきい値を設定',
+    '試聴用の音声を追加',
+    'スペクトログラム',
+    '調査メモ',
+    'スコア0.7の区間をクリック',
+    '計算対象全体 6件 / 一覧表示 1件',
+    '範囲を解除',
+    '端末に保存済み',
+    '再読込',
+    '保存した分析',
+    'WAV音声から異常スコアを生成しません',
+    '音声なし',
+    '操作間の待ち時間を省いています',
+  ])
+    assert.ok(manualText.includes(phrase), `manual text is missing: ${phrase}`);
+
+  const videoMatch = html.match(/<video\b([^>]*)>([\s\S]*?)<\/video>/i);
+  assert.ok(videoMatch, 'manual must include the workflow video');
+  const [, videoAttributes, videoBody] = videoMatch;
+  assert.match(videoAttributes, /\baria-label="ASD Insightの操作動画"/i);
+  assert.match(videoAttributes, /\bcontrols(?:\s|$)/i);
+  assert.match(videoAttributes, /\bpreload="none"/i);
+  assert.match(videoAttributes, /\bplaysinline(?:\s|$)/i);
+  assert.match(
+    videoAttributes,
+    /\bposter="\.\/assets\/local-workflow-poster\.png"/i,
+  );
+  assert.doesNotMatch(videoAttributes, /\b(?:autoplay|loop)(?:\s|=|$)/i);
+  assert.match(
+    videoBody,
+    /<source\b[^>]*src="\.\/assets\/local-workflow\.mp4"[^>]*>/i,
+  );
+  const trackMatch = videoBody.match(/<track\b([^>]*)>/i);
+  assert.ok(trackMatch, 'workflow video must include a subtitle track');
+  const [, trackAttributes] = trackMatch;
+  assert.match(trackAttributes, /\bkind="subtitles"/i);
+  assert.match(trackAttributes, /\bsrc="\.\/assets\/local-workflow\.ja\.vtt"/i);
+  assert.match(trackAttributes, /\bsrclang="ja"/i);
+  assert.match(trackAttributes, /\blabel="日本語字幕"/i);
+  assert.match(trackAttributes, /\bdefault(?:\s|$)/i);
+  assert.match(html, /href="\.\/assets\/local-workflow\.mp4"/i);
+  assert.match(
+    html,
+    /<a\b[^>]*href="\.\/assets\/local-workflow\.ja\.vtt"[^>]*\bdownload(?:\s|=|>)/i,
+  );
+  for (const path of ['./sample/inspection.csv', './sample/tone.wav']) {
+    const escapedPath = path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    assert.match(
+      html,
+      new RegExp(
+        `<a\\b[^>]*href="${escapedPath}"[^>]*\\bdownload(?:\\s|=|>)`,
+        'i',
+      ),
+      `${path} must be offered as a download`,
+    );
+  }
+
+  const subtitles = await readFile(
+    join(manual, 'assets/local-workflow.ja.vtt'),
+    'utf8',
+  );
+  assert.match(subtitles, /^\uFEFF?WEBVTT(?:[ \t].*)?(?:\r?\n|$)/);
+  const cues = [
+    ...subtitles.matchAll(
+      /^(\d{2,}:\d{2}:\d{2}\.\d{3}|\d{2}:\d{2}\.\d{3})\s+-->\s+(\d{2,}:\d{2}:\d{2}\.\d{3}|\d{2}:\d{2}\.\d{3})(?:\s+[^\r\n]*)?$/gm,
+    ),
+  ];
+  assert.ok(cues.length > 0, 'Japanese WebVTT must contain at least one cue');
+  for (const [, start, end] of cues)
+    assert.ok(
+      vttTimestampMs(start) < vttTimestampMs(end),
+      `WebVTT cue must end after it starts: ${start} --> ${end}`,
+    );
+  assert.match(
+    subtitles,
+    /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u,
+    'subtitle file must contain Japanese text',
+  );
+
+  const csv = (await readFile(join(manual, 'sample/inspection.csv'), 'utf8'))
+    .replace(/^\uFEFF/, '')
+    .trim();
+  const csvRows = csv.split(/\r?\n/).map((line) => line.split(','));
+  assert.deepEqual(csvRows[0], ['検査名', '異常スコア', '判定群', '音声名']);
+  const records = csvRows.slice(1);
+  assert.equal(records.length, 6, 'inspection fixture must contain six data rows');
+  assert.ok(records.every((row) => row.length === 4));
+  assert.equal(
+    records.filter((row) => row[2] === '正常').length,
+    3,
+    'inspection fixture must contain three 正常 rows',
+  );
+  assert.equal(
+    records.filter((row) => row[2] === '要確認').length,
+    3,
+    'inspection fixture must contain three 要確認 rows',
+  );
+  assert.equal(
+    records.filter((row) => row[3] === 'tone.wav').length,
+    1,
+    'inspection fixture must reference tone.wav once',
+  );
+  assert.ok(
+    records.every((row) => row[1] !== '' && Number.isFinite(Number(row[1]))),
+    'inspection fixture scores must be precomputed numbers',
+  );
   assertManualMarkupBalanced(html);
   const css = await readFile(join(manual, 'manual.css'), 'utf8');
+  assert.match(css, /\.workflow-video\s*\{/);
+  assert.match(css, /\.workflow-video-player\s*\{/);
+  assert.match(css, /aspect-ratio:\s*1280\s*\/\s*840/);
+  assert.match(css, /\.workflow-video-player::cue\s*\{/);
+  assert.match(css, /\.workflow-video a:focus-visible/);
+  assert.match(
+    css,
+    /@media\s*\(max-width:\s*700px\)[\s\S]*?\.workflow-video\s*\{[\s\S]*?grid-template-columns:\s*1fr/,
+  );
   assert.match(css, /\.motion-static\s*\{\s*display:\s*none;/);
   assert.match(
     css,
@@ -127,6 +295,11 @@ test('manual is a self-contained static bundle and prepare-static copies it exac
       !path.startsWith('/'),
       `manual reference must be relative: ${reference}`,
     );
+    await access(join(manual, path));
+  }
+  for (const [, reference] of html.matchAll(/poster="([^"]+)"/g)) {
+    const path = reference.split(/[?#]/, 1)[0];
+    assert.ok(path && !path.startsWith('/'), `poster must be relative: ${reference}`);
     await access(join(manual, path));
   }
 });

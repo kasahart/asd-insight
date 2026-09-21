@@ -35,7 +35,133 @@
           <a href="#distribution"><span>3</span> 分布</a>
           <a href="#samples"><span>4</span> サンプル</a>
           <a href="#save"><span>5</span> 保存</a>
+          <a href="#video"><span aria-hidden="true">▶</span> 操作動画</a>
         </nav>
+      </section>
+
+      <section
+        class="workflow-video"
+        id="video"
+        aria-labelledby="video-title"
+      >
+        <div class="video-copy">
+          <p class="eyebrow">操作動画</p>
+          <h2 id="video-title">練習用データで一連の流れを見る</h2>
+          <p>
+            CSVを読み込み、列を対応づけ、仮しきい値と音声の表示を確認してから、分析を保存して再開するまでの操作を収録しています。
+          </p>
+          <p class="video-note">
+            動画はユーザー操作で再生します。音声なしで、字幕を使えない場合は下の「操作順」を動画の代わりに読めます。
+          </p>
+        </div>
+        <figure class="video-figure">
+          <video
+            class="workflow-video-player"
+            aria-label="ASD Insightの操作動画"
+            controls
+            preload="none"
+            playsinline
+            poster="./assets/local-workflow-poster.png"
+          >
+            <source
+              src="./assets/local-workflow.mp4"
+              type="video/mp4"
+            />
+            <track
+              kind="subtitles"
+              src="./assets/local-workflow.ja.vtt"
+              srclang="ja"
+              label="日本語字幕"
+              default
+            />
+            <p>
+              動画を再生できない場合は、<a
+                href="./assets/local-workflow.mp4"
+                target="_blank"
+                rel="noopener"
+                >動画ファイルを単体で開く</a
+              >か、左の操作順を確認してください。
+            </p>
+          </video>
+          <figcaption>
+            無音で、WAVの再生音は含まれません。音声確認はスペクトログラム表示までです。操作場面ごとに編集し、操作間の待ち時間を省いています。日本語字幕はプレーヤーの字幕メニューから切り替えられます。<a
+              class="video-link"
+              href="./assets/local-workflow.mp4"
+              target="_blank"
+              rel="noopener"
+              >動画だけを開く</a
+            >・<a
+              class="video-link"
+              href="./assets/local-workflow.ja.vtt"
+              download
+              >字幕ファイルをダウンロード</a
+            >
+          </figcaption>
+        </figure>
+        <div class="workflow-support">
+          <div class="workflow-order">
+            <h3>操作順（字幕の代わり）</h3>
+            <ol>
+              <li>
+                <b>データを選ぶ</b> → <b>CSV・TSV</b> → inspection.csv →
+                <b>このデータを表示</b>。
+              </li>
+              <li>
+                「評価条件」で「評価する異常度の列」→ 異常スコア、「群分けに使う列」→ 判定群を明示的に選びます。「サンプル名・試聴音声」で「サンプル名に使う列」→ 検査名、「音声のファイル名・パス列」→ 音声名を選びます。
+              </li>
+              <li>
+                正常をOK基準群として確認し、<b>仮しきい値を設定</b>を押します。
+              </li>
+              <li>
+                スコア0.7の区間をクリックすると一覧を1件に絞り、「計算対象全体 6件 / 一覧表示 1件」を確認できます。「範囲を解除」を押して戻します。
+              </li>
+              <li>
+                <b>試聴用の音声を追加</b>でtone.wavを選び、対象行を選択して調査メモを入力し、<b>スペクトログラム</b>を確認します。
+              </li>
+              <li>
+                <b>端末に保存済み</b>を確認し、ページを再読込して、<b>保存した分析</b>から再開します。再開後は「評価条件」と仮しきい値を確認し、未設定なら<b>仮しきい値を設定</b>を押します。
+              </li>
+            </ol>
+          </div>
+          <div class="workflow-fixtures">
+            <h3>練習用ファイル</h3>
+            <p>
+              CSVは異常スコアを計算済みの練習データです。このアプリはWAV音声から異常スコアを生成しません。列は「検査名」「異常スコア」「判定群」「音声名」の4列、6行（正常3行・要確認3行）で、音声名がtone.wavなのは1行だけです。列名は自動推測に任せず、画面で明示的に選択してください。
+            </p>
+            <div class="fixture-links">
+              <a
+                class="download-link"
+                href="./sample/inspection.csv"
+                download
+              >
+                CSVをダウンロード
+              </a>
+              <a class="download-link" href="./sample/tone.wav" download>
+                WAVをダウンロード
+              </a>
+            </div>
+          </div>
+        </div>
+        <aside class="troubleshooting" aria-labelledby="troubleshooting-title">
+          <h3 id="troubleshooting-title">うまくいかないとき</h3>
+          <ul>
+            <li>
+              CSVを表示できない場合は、UTF-8のCSV（またはTSV）で、列名の重複・空欄と行ごとの列数を確認してから、もう一度「CSV・TSV」→「このデータを表示」を選びます。
+            </li>
+            <li>
+              スコアや群が空になる場合は、「評価する異常度の列」→異常スコア、「群分けに使う列」→判定群を選びます。異常スコアは数値が入った行だけが計算対象です。
+            </li>
+            <li>
+              音声が見つからない場合は、表示後の「サンプル名・試聴音声」から「試聴用の音声を追加」を選び、CSVの音声名とファイル名（拡張子を含む）が一致するか確認します。CSVのURLやパスから音声は自動取得しません。
+            </li>
+            <li>
+              スペクトログラムが表示されない場合は、対象行を選び直し、詳細に表示される対応音声の理由を確認します。対応するWAVを追加して「音声解析を再試行」しても解決しない場合は、別のブラウザーまたは対応形式で試します。
+            </li>
+            <li>
+              保存した分析が見つからない場合は、保存したときと同じブラウザープロファイルの「保存した分析」を開きます。再開後は評価条件と仮しきい値を確認し、未設定なら「仮しきい値を設定」を押します。ブラウザーデータの消去に備え、必要なら元CSV・音声を含むバックアップ（.ovlab）を保管します。
+            </li>
+          </ul>
+        </aside>
       </section>
 
       <div class="guide-steps">
