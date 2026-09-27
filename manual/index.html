@@ -128,6 +128,9 @@
             <p>
               CSVは異常スコアを計算済みの練習データです。このアプリはWAV音声から異常スコアを生成しません。列は「検査名」「異常スコア」「判定群」「音声名」の4列、6行（正常3行・要確認3行）で、音声名がtone.wavなのは1行だけです。列名は自動推測に任せず、画面で明示的に選択してください。
             </p>
+            <p>
+              WAVは単体ファイルではなくフォルダーを選択します。下のCSVとWAVをダウンロードし、端末に「inspection-data」などのフォルダーを作って、<code>inspection.csv</code>と<code>tone.wav</code>をその直下に保存してください。CSVを読み込んだ後、「WAVフォルダを選択」で同じフォルダーを選びます。CSVの音声名<code>tone.wav</code>は、選択したフォルダー直下のWAVを指します。
+            </p>
             <div class="fixture-links">
               <a
                 class="download-link"

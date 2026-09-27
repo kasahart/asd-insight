@@ -26,7 +26,9 @@ function vttTimestampMs(value) {
   const hours = parts.length ? Number(parts.pop()) : 0;
   assert.equal(parts.length, 0, `invalid WebVTT timestamp: ${value}`);
   assert.ok(
-    Number.isInteger(hours) && Number.isInteger(minutes) && Number.isFinite(seconds),
+    Number.isInteger(hours) &&
+      Number.isInteger(minutes) &&
+      Number.isFinite(seconds),
     `invalid WebVTT timestamp: ${value}`,
   );
   assert.ok(minutes >= 0 && minutes < 60, `invalid WebVTT minutes: ${value}`);
@@ -149,6 +151,10 @@ test('manual is a self-contained static bundle and prepare-static copies it exac
     '再読込',
     '保存した分析',
     'WAV音声から異常スコアを生成しません',
+    'WAVは単体ファイルではなくフォルダーを選択します',
+    'inspection-data',
+    '同じフォルダーを選びます',
+    'フォルダー直下のWAV',
     '音声なし',
     '字幕に対応する枠と番号付きラベル',
     '枠表示中は操作後の画面を静止しています',
@@ -229,8 +235,16 @@ test('manual is a self-contained static bundle and prepare-static copies it exac
   const csvRows = csv.split(/\r?\n/).map((line) => line.split(','));
   assert.deepEqual(csvRows[0], ['検査名', '異常スコア', '判定群', '音声名']);
   const records = csvRows.slice(1);
-  assert.equal(records.length, 6, 'inspection fixture must contain six data rows');
+  assert.equal(
+    records.length,
+    6,
+    'inspection fixture must contain six data rows',
+  );
   assert.ok(records.every((row) => row.length === 4));
+  assert.match(
+    html,
+    /CSVとWAVをダウンロードし、端末に「inspection-data」などのフォルダーを作って、<code>inspection\.csv<\/code>と<code>tone\.wav<\/code>をその直下に保存/,
+  );
   assert.equal(
     records.filter((row) => row[2] === '正常').length,
     3,
@@ -304,7 +318,10 @@ test('manual is a self-contained static bundle and prepare-static copies it exac
   }
   for (const [, reference] of html.matchAll(/poster="([^"]+)"/g)) {
     const path = reference.split(/[?#]/, 1)[0];
-    assert.ok(path && !path.startsWith('/'), `poster must be relative: ${reference}`);
+    assert.ok(
+      path && !path.startsWith('/'),
+      `poster must be relative: ${reference}`,
+    );
     await access(join(manual, path));
   }
 });

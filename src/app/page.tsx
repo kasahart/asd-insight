@@ -76,6 +76,7 @@ import {
   unusedColumn,
   type AudioResolution,
   type GroupSpec,
+  type Profile,
   type Sample,
 } from '@/lib/data';
 
@@ -84,7 +85,6 @@ import { useWorkspace, useSessionState } from '@/state/workspace-context';
 import { EvaluationWorkerClient } from '@domain/evaluation-client';
 import type { QueryMode } from '@contracts/evaluation';
 import type { SessionRecord } from '@contracts/storage';
-import type { Profile } from '@/lib/data';
 
 type AnalysisReportInput = {
   data: Dataset;
@@ -692,6 +692,44 @@ function DiagnosticsWorkspace() {
       client.dispose();
     };
   }, [data]);
+  const folderProfiles = useMemo<Profile[]>(() => {
+    if (!folderColumnNames.length) return [];
+    const valueSets = new Map(
+      folderColumnNames.map((column) => [column, new Set<string>()]),
+    );
+    const nonemptyCounts = new Map(
+      folderColumnNames.map((column) => [column, 0]),
+    );
+    for (const row of data.rows) {
+      for (const column of folderColumnNames) {
+        const value = row[column] ?? '';
+        if (!value.trim()) continue;
+        valueSets.get(column)?.add(value);
+        nonemptyCounts.set(column, (nonemptyCounts.get(column) ?? 0) + 1);
+      }
+    }
+    return folderColumnNames.map((column) => ({
+      column,
+      // Folder names are labels even when they look numeric, so they always
+      // use categorical cohorts and retain every value supported by WAVs.
+      numeric: false,
+      values: [...(valueSets.get(column) ?? [])],
+      validNumbers: 0,
+      nonempty: nonemptyCounts.get(column) ?? 0,
+    }));
+  }, [data, folderColumnNames]);
+  const selectableProfiles = useMemo(() => {
+    const folderProfileByColumn = new Map(
+      folderProfiles.map((profile) => [profile.column, profile]),
+    );
+    const merged = profiles.map(
+      (profile) => folderProfileByColumn.get(profile.column) ?? profile,
+    );
+    for (const profile of folderProfiles)
+      if (!profiles.some((candidate) => candidate.column === profile.column))
+        merged.push(profile);
+    return merged;
+  }, [profiles, folderProfiles]);
   const scores = profiles.filter(
     (p) =>
       sourceData.columns.includes(p.column) &&
@@ -708,26 +746,31 @@ function DiagnosticsWorkspace() {
   useEffect(() => {
     if (score && score !== storedScore) setScore(score);
   }, [score, storedScore, setScore]);
-  const groupProfiles = profiles.filter(
+  const groupProfiles = selectableProfiles.filter(
     (p) =>
       p.column !== score &&
       (p.column === group.column ||
         (p.column !== idColumn && p.column !== audioColumn)) &&
-      (p.numeric || p.values.length <= 100) &&
+      (p.numeric ||
+        p.values.length <= 100 ||
+        folderColumnNames.includes(p.column)) &&
       p.nonempty > 0,
   );
-  const filterProfiles = profiles.filter(
+  const filterProfiles = selectableProfiles.filter(
     (p) =>
       p.column !== idColumn &&
       p.column !== audioColumn &&
-      p.values.length <= 100,
+      (p.values.length <= 100 || folderColumnNames.includes(p.column)),
   );
   const numericColumns = useMemo(
     () =>
       profiles
-        .filter((profile) => profile.numeric)
+        .filter(
+          (profile) =>
+            profile.numeric && !folderColumnNames.includes(profile.column),
+        )
         .map((profile) => profile.column),
-    [profiles],
+    [profiles, folderColumnNames],
   );
   const effectiveGroup = useMemo<GroupSpec>(
     () =>
@@ -783,7 +826,7 @@ function DiagnosticsWorkspace() {
     setRangeHi('');
   }
   function setGroupColumn(column: string, kind?: 'category' | 'numeric') {
-    const p = profiles.find((p) => p.column === column);
+    const p = selectableProfiles.find((p) => p.column === column);
     if (!p) return;
     const g = defaultGroup(data, p, kind);
     setGroup(g);
@@ -795,19 +838,22 @@ function DiagnosticsWorkspace() {
     setScore(column);
     resetSelection();
     if (group.column === column) {
-      const p = profiles.find(
+      const p = selectableProfiles.find(
         (p) =>
           p.column !== column &&
           p.column !== idColumn &&
           p.column !== audioColumn &&
           p.values.length >= 2 &&
-          (p.numeric || p.values.length <= 100),
+          (p.numeric ||
+            p.values.length <= 100 ||
+            folderColumnNames.includes(p.column)),
       );
       if (p) setGroupColumn(p.column);
       else setGroup({ kind: 'category', column: '', a: '', b: '' });
     }
   }
   function previewAudio(files: FileList) {
+    setPendingAudio(null);
     if (!audioColumn && !idColumn) {
       setMessage({
         error: true,
@@ -1123,7 +1169,7 @@ function DiagnosticsWorkspace() {
                         </option>
                       ))}
                     </NativeSelect>
-                    {profiles.find((p) => p.column === group.column)
+                    {selectableProfiles.find((p) => p.column === group.column)
                       ?.numeric && (
                       <NativeSelect
                         aria-label="群分けの方法"
@@ -1139,8 +1185,9 @@ function DiagnosticsWorkspace() {
                         <option
                           value="category"
                           disabled={
-                            (profiles.find((p) => p.column === group.column)
-                              ?.values.length ?? 0) > 100
+                            (selectableProfiles.find(
+                              (p) => p.column === group.column,
+                            )?.values.length ?? 0) > 100
                           }
                         >
                           値をカテゴリとして選ぶ
@@ -1163,7 +1210,7 @@ function DiagnosticsWorkspace() {
                             resetSelection();
                           }}
                         >
-                          {profiles
+                          {selectableProfiles
                             .find((p) => p.column === group.column)
                             ?.values.map((v) => (
                               <option key={v} value={v}>
@@ -1185,7 +1232,7 @@ function DiagnosticsWorkspace() {
                             resetSelection();
                           }}
                         >
-                          {profiles
+                          {selectableProfiles
                             .find((p) => p.column === group.column)
                             ?.values.map((v) => (
                               <option key={v} value={v}>
@@ -1262,7 +1309,7 @@ function DiagnosticsWorkspace() {
                         }}
                       >
                         <option value="">すべて</option>
-                        {profiles
+                        {selectableProfiles
                           .find((p) => p.column === filterColumn)
                           ?.values.map((v) => (
                             <option value={v} key={v}>
