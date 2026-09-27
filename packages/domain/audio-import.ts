@@ -2,6 +2,24 @@ import type { DataRow, Dataset } from './demo.ts';
 import { resolveAudio, unusedColumn, type AudioResolution } from './data.ts';
 
 export type AudioAudit = ReturnType<typeof auditAudioMatches>;
+export const MAX_FOLDER_LEVELS = 64;
+export const AUDIO_PREVIEW_ITEM_LIMIT = 100;
+
+/** Keep saved mappings bound to actual source columns after folder attributes appear. */
+export function sourceColumnSelection(
+  sourceColumns: readonly string[],
+  choice: string,
+) {
+  return sourceColumns.includes(choice) ? choice : '';
+}
+
+/** Keep large audit sections readable without mounting every matched row. */
+export function previewItems<T>(
+  items: readonly T[],
+  limit = AUDIO_PREVIEW_ITEM_LIMIT,
+) {
+  return items.slice(0, limit);
+}
 
 /** A read-only preview of the complete prospective attachment set. */
 export function auditAudioMatches<T>(
@@ -15,12 +33,11 @@ export function auditAudioMatches<T>(
   const references = new Map<string, number[]>();
   for (const [index, row] of data.rows.entries()) {
     const result = resolveAudio(row, index, idColumn, audioColumn, files);
-    if (result.key)
-      references.set(result.key, [
-        ...(references.get(result.key) ?? []),
-        index + 1,
-      ]);
-    else if (result.reason === 'ambiguous')
+    if (result.key) {
+      const rows = references.get(result.key);
+      if (rows) rows.push(index + 1);
+      else references.set(result.key, [index + 1]);
+    } else if (result.reason === 'ambiguous')
       ambiguous.push({ row: index + 1, candidates: result.candidates ?? [] });
     else
       missing.push({
@@ -130,6 +147,16 @@ export function withFolderAttributes<T>(
   levels: readonly number[],
 ): Dataset {
   if (!levels.length) return data;
+  if (
+    levels.length > MAX_FOLDER_LEVELS ||
+    levels.some(
+      (level) =>
+        !Number.isInteger(level) || level < 1 || level > MAX_FOLDER_LEVELS,
+    )
+  )
+    throw new Error(
+      `WAVフォルダ階層は${MAX_FOLDER_LEVELS}階層まで分析条件に追加できます。フォルダ構造を浅くしてください。`,
+    );
   const columns = levels.map((level) => folderAttributeColumn(data, level));
   return {
     ...data,

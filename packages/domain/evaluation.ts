@@ -27,6 +27,7 @@ import type {
 export const DATASET_LIMITS = {
   rows: 100_000,
   columns: 128,
+  folderLevels: 64,
   csvBytes: 20 * 1024 * 1024,
 } as const;
 
@@ -42,10 +43,13 @@ export function validateDataset(dataset: Dataset): void {
     throw new Error('データセットの形式が不正です。');
   if (
     !dataset.columns.length ||
-    dataset.columns.length > DATASET_LIMITS.columns ||
+    dataset.columns.length >
+      DATASET_LIMITS.columns + DATASET_LIMITS.folderLevels ||
     dataset.rows.length > DATASET_LIMITS.rows
   )
-    throw new Error('データセットは100,000行・128列までです。');
+    throw new Error(
+      'データセットは100,000行・CSV128列とWAVフォルダ階層64列までです。',
+    );
   if (
     dataset.columns.some(
       (column) => typeof column !== 'string' || !column.trim(),

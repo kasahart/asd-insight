@@ -6,14 +6,142 @@ import {
   resolveAudio,
 } from '../../packages/domain/data.ts';
 import {
+  AUDIO_PREVIEW_ITEM_LIMIT,
+  MAX_FOLDER_LEVELS,
   audioListDisplay,
   auditAudioMatches,
   folderAttributeCandidates,
+  previewItems,
+  sourceColumnSelection,
   withFolderAttributes,
 } from '../../packages/domain/audio-import.ts';
 import { addAudioAttachments } from '../../src/lib/audio-attachments.ts';
+import {
+  derivedPopulationSignature,
+  evaluationPopulationKey,
+} from '../../packages/domain/sample-review.ts';
 
 const file = (name) => ({ name });
+
+test('population keys keep the exact saved format when derived columns are unused', () => {
+  const legacyParts = [
+    'dataset-hash',
+    'evaluation-v1',
+    'score',
+    { kind: 'category', column: 'group', a: 'A', b: 'B' },
+    '',
+    '',
+    [],
+    'A',
+    'high',
+  ];
+  const legacyKey = JSON.stringify(legacyParts);
+  assert.equal(evaluationPopulationKey(legacyParts, ''), legacyKey);
+  assert.equal(
+    evaluationPopulationKey(legacyParts, '2:123:456'),
+    JSON.stringify([...legacyParts, '2:123:456']),
+  );
+});
+
+test('derived population signature follows active folder memberships only', () => {
+  const dataset = {
+    name: 'audio.csv',
+    demo: false,
+    columns: ['score', 'label', 'folder', 'unused_folder'],
+    rows: [
+      { score: '1', label: 'OK', folder: 'A', unused_folder: 'x' },
+      { score: '2', label: 'NG', folder: 'B', unused_folder: 'y' },
+    ],
+  };
+  const group = { kind: 'category', column: 'folder', a: 'A', b: 'B' };
+  const empty = new Set();
+  const initial = derivedPopulationSignature(dataset, group, null, empty, [
+    'folder',
+    'unused_folder',
+  ]);
+  const onlyUnselectedFolderChanged = {
+    ...dataset,
+    rows: dataset.rows.map((row, index) => ({
+      ...row,
+      unused_folder: `changed-${index}`,
+    })),
+  };
+  assert.equal(
+    derivedPopulationSignature(
+      onlyUnselectedFolderChanged,
+      group,
+      null,
+      empty,
+      ['folder', 'unused_folder'],
+    ),
+    initial,
+  );
+  const attached = {
+    ...dataset,
+    rows: dataset.rows.map((row, index) => ({
+      ...row,
+      folder: index === 0 ? 'B' : 'A',
+    })),
+  };
+  assert.notEqual(
+    derivedPopulationSignature(attached, group, null, empty, ['folder']),
+    initial,
+  );
+
+  const filterGroup = { kind: 'category', column: 'label', a: 'OK', b: 'NG' };
+  const condition = { column: 'folder', value: 'A' };
+  const beforeFilterPopulation = derivedPopulationSignature(
+    dataset,
+    filterGroup,
+    condition,
+    empty,
+    ['folder'],
+  );
+  assert.notEqual(
+    derivedPopulationSignature(attached, filterGroup, condition, empty, [
+      'folder',
+    ]),
+    beforeFilterPopulation,
+  );
+});
+
+test('preview rows are bounded and saved source-column choices ignore derived columns', () => {
+  const values = Array.from({ length: 10_000 }, (_, index) => index);
+  assert.deepEqual(
+    previewItems(values),
+    values.slice(0, AUDIO_PREVIEW_ITEM_LIMIT),
+  );
+  assert.equal(
+    sourceColumnSelection(['score', 'audio_file'], 'audio_file'),
+    'audio_file',
+  );
+  assert.equal(
+    sourceColumnSelection(['score', 'audio_file'], 'WAVフォルダ階層1'),
+    '',
+  );
+  const data = {
+    name: 'legacy.csv',
+    demo: false,
+    columns: ['sample_id', 'audio_file', 'score'],
+    rows: [
+      {
+        sample_id: '001',
+        audio_file: '設備A/正常/001.wav',
+        score: '0.1',
+      },
+    ],
+  };
+  const audioColumn = sourceColumnSelection(data.columns, 'WAVフォルダ階層1');
+  const attached = withFolderAttributes(
+    data,
+    'sample_id',
+    audioColumn,
+    new Map([['設備A/正常/001.wav', file('001.wav')]]),
+    [1, 2],
+  );
+  assert.equal(attached.rows[0]['WAVフォルダ階層1'], '設備A');
+  assert.equal(attached.rows[0]['WAVフォルダ階層2'], '正常');
+});
 
 test('audio resolution reports only evidence from the existing matching rule', () => {
   const empty = resolveAudio(
@@ -210,6 +338,27 @@ test('folder keys distinguish equal names, and basename-only references require 
   );
 });
 
+test('basename indexing keeps a large same-name candidate set intact', () => {
+  const count = 8_000;
+  const files = new Map(
+    Array.from({ length: count }, (_, index) => [
+      `folder-${index}/shared.wav`,
+      file('shared.wav'),
+    ]),
+  );
+  const result = resolveAudio(
+    { audio_file: 'shared.wav' },
+    0,
+    '',
+    'audio_file',
+    files,
+  );
+  assert.equal(result.reason, 'ambiguous');
+  assert.equal(result.candidates.length, count);
+  assert.equal(result.candidates[0], 'folder-0/shared.wav');
+  assert.equal(result.candidates.at(-1), `folder-${count - 1}/shared.wav`);
+});
+
 test('audit lists missing, ambiguous, unused and repeated attachments before import', () => {
   const data = {
     name: 'inspection.csv',
@@ -252,6 +401,49 @@ test('audit lists missing, ambiguous, unused and repeated attachments before imp
   assert.equal(adopted.rows[0]['WAVフォルダ階層2'], '設備A');
   assert.equal(adopted.rows[2]['WAVフォルダ階層1'], '');
   assert.equal(data.rows[0]['WAVフォルダ階層1'], undefined);
+});
+
+test('audit retains all row numbers for a large repeated-reference set', () => {
+  const count = 8_000;
+  const data = {
+    name: 'many-rows.csv',
+    demo: false,
+    columns: ['audio_file'],
+    rows: Array.from({ length: count }, () => ({ audio_file: 'shared.wav' })),
+  };
+  const audit = auditAudioMatches(
+    data,
+    '',
+    'audio_file',
+    new Map([['shared.wav', file('shared.wav')]]),
+  );
+  assert.equal(audit.repeated.length, 1);
+  assert.equal(audit.repeated[0].rows.length, count);
+  assert.equal(audit.repeated[0].rows[0], 1);
+  assert.equal(audit.repeated[0].rows.at(-1), count);
+});
+
+test('folder levels over the supported limit are reported instead of dropped', () => {
+  const path = [
+    ...Array.from(
+      { length: MAX_FOLDER_LEVELS + 1 },
+      (_, index) => `L${index + 1}`,
+    ),
+    'deep.wav',
+  ].join('/');
+  const files = new Map([[path, file('deep.wav')]]);
+  const data = {
+    name: 'deep.csv',
+    demo: false,
+    columns: ['audio_file', 'score'],
+    rows: [{ audio_file: path, score: '0.5' }],
+  };
+  const levels = folderAttributeCandidates(files).map(({ level }) => level);
+  assert.equal(levels.length, MAX_FOLDER_LEVELS + 1);
+  assert.throws(
+    () => withFolderAttributes(data, '', 'audio_file', files, levels),
+    /64階層まで分析条件に追加できます/,
+  );
 });
 
 test('batch addition keeps equal basenames in distinct folders and rejects duplicate paths atomically', () => {

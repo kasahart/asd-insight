@@ -28,10 +28,13 @@ import { ContextWorkbench } from '@/components/context-workbench';
 import { EvaluationSettings } from '@/components/evaluation-settings';
 import { addAudioAttachments } from '@/lib/audio-attachments';
 import {
+  MAX_FOLDER_LEVELS,
   auditAudioMatches,
   audioListDisplay,
   folderAttributeCandidates,
   folderAttributeColumn,
+  previewItems,
+  sourceColumnSelection,
   withFolderAttributes,
 } from '@domain/audio-import';
 import {
@@ -498,15 +501,26 @@ function DiagnosticsWorkspace() {
   const { active, controller, policy, operation } = useWorkspace();
   const sourceData = active!.dataset;
   const datasetSession = active!.record.id;
-  const [score, setScore] = useSessionState('score', '');
+  const [storedScore, setScore] = useSessionState('score', '');
   const [group, setGroup] = useSessionState<GroupSpec>('group', {
     kind: 'category',
     column: '',
     a: '',
     b: '',
   });
-  const [idColumn] = useSessionState('idColumn', '');
-  const [audioColumn, setAudioColumn] = useSessionState('audioColumn', '');
+  const [storedIdColumn] = useSessionState('idColumn', '');
+  const idColumn = sourceColumnSelection(sourceData.columns, storedIdColumn);
+  const [storedAudioColumn, setAudioColumn] = useSessionState(
+    'audioColumn',
+    '',
+  );
+  const audioColumn = sourceColumnSelection(
+    sourceData.columns,
+    storedAudioColumn,
+  );
+  useEffect(() => {
+    if (storedAudioColumn && !audioColumn) setAudioColumn('');
+  }, [storedAudioColumn, audioColumn, setAudioColumn]);
   const [adoptedFolderLevels, setAdoptedFolderLevels] = useSessionState<
     number[]
   >('adoptedFolderLevels', []);
@@ -534,9 +548,20 @@ function DiagnosticsWorkspace() {
     {},
   );
   const audioFiles = active!.audioFiles;
-  const folderLevels = useMemo(
-    () => folderAttributeCandidates(audioFiles).map(({ level }) => level),
+  const activeFolderCandidates = useMemo(
+    () => folderAttributeCandidates(audioFiles),
     [audioFiles],
+  );
+  const folderLevels = useMemo(
+    () =>
+      activeFolderCandidates
+        .slice(0, MAX_FOLDER_LEVELS)
+        .map(({ level }) => level),
+    [activeFolderCandidates],
+  );
+  const folderColumnNames = useMemo(
+    () => folderLevels.map((level) => folderAttributeColumn(sourceData, level)),
+    [sourceData, folderLevels],
   );
   useEffect(() => {
     if (JSON.stringify(adoptedFolderLevels) !== JSON.stringify(folderLevels))
@@ -578,9 +603,56 @@ function DiagnosticsWorkspace() {
         : null,
     [pendingAudio, sourceData, idColumn, audioColumn],
   );
-  const folderCandidates = folderAttributeCandidates(
-    pendingAudio?.files ?? audioFiles,
+  const folderCandidates = useMemo(
+    () => folderAttributeCandidates(pendingAudio?.files ?? audioFiles),
+    [pendingAudio?.files, audioFiles],
   );
+  const audioPreviewSections = useMemo(() => {
+    if (!pendingAudio || !previewAudit) return [];
+    const sections = [
+      {
+        title: '未対応のCSV行',
+        count: previewAudit.missing.length,
+        values: previewItems(previewAudit.missing).map(
+          (item) => `${item.row}行目: ${item.expected || '空欄'}`,
+        ),
+      },
+      {
+        title: '曖昧なCSV行',
+        count: previewAudit.ambiguous.length,
+        values: previewItems(previewAudit.ambiguous).map((item) => {
+          const candidates = previewItems(item.candidates);
+          const omitted = item.candidates.length - candidates.length;
+          return `${item.row}行目: ${candidates.join('、')}${omitted ? `、ほか${omitted}件` : ''}`;
+        }),
+      },
+      {
+        title: '参照されないWAV',
+        count: previewAudit.unused.length,
+        values: previewItems(previewAudit.unused),
+      },
+      {
+        title: '複数行から参照されるWAV',
+        count: previewAudit.repeated.length,
+        values: previewItems(previewAudit.repeated).map((item) => {
+          const rows = previewItems(item.rows);
+          const omitted = item.rows.length - rows.length;
+          return `${item.key}: ${item.rows.length}行から参照（${rows.join('、')}${omitted ? `、ほか${omitted}行` : ''}）`;
+        }),
+      },
+      {
+        title: '重複する相対パス',
+        count: pendingAudio.duplicates.length,
+        values: previewItems(pendingAudio.duplicates),
+      },
+      {
+        title: '既存の対応が変わる行',
+        count: pendingAudio.changed.length,
+        values: previewItems(pendingAudio.changed).map((row) => `${row}行目`),
+      },
+    ];
+    return sections.filter((section) => section.count > 0);
+  }, [pendingAudio, previewAudit]);
   const audioDisplayColumn = sourceData.demo
     ? sourceData.columns.includes('audio_file')
       ? 'audio_file'
@@ -629,10 +701,20 @@ function DiagnosticsWorkspace() {
   }, [data]);
   const scores = profiles.filter(
     (p) =>
+      sourceData.columns.includes(p.column) &&
       p.numeric &&
-      (p.column === score ||
+      (p.column === storedScore ||
         (p.column !== idColumn && p.column !== audioColumn)),
   );
+  const score =
+    sourceData.columns.includes(storedScore) &&
+    (!profiles.length ||
+      scores.some((profile) => profile.column === storedScore))
+      ? storedScore
+      : (scores[0]?.column ?? '');
+  useEffect(() => {
+    if (score && score !== storedScore) setScore(score);
+  }, [score, storedScore, setScore]);
   const groupProfiles = profiles.filter(
     (p) =>
       p.column !== score &&
@@ -749,6 +831,14 @@ function DiagnosticsWorkspace() {
       if (map.has(key)) duplicates.push(key);
       else map.set(key, file);
     }
+    const candidateLevels = folderAttributeCandidates(map);
+    if (candidateLevels.length > MAX_FOLDER_LEVELS) {
+      setMessage({
+        error: true,
+        text: `WAVフォルダ階層は${MAX_FOLDER_LEVELS}階層まで分析条件に追加できます。今回のフォルダは${candidateLevels.length}階層あるため、取り込めません。`,
+      });
+      return;
+    }
     const changed = sourceData.rows.flatMap((row, index) => {
       const previous = findAudio(row, index, idColumn, audioColumn, audioFiles);
       return previous &&
@@ -785,7 +875,9 @@ function DiagnosticsWorkspace() {
     }
     setAudioFiles(map);
     setAdoptedFolderLevels(
-      folderAttributeCandidates(map).map(({ level }) => level),
+      folderAttributeCandidates(map)
+        .slice(0, MAX_FOLDER_LEVELS)
+        .map(({ level }) => level),
     );
     setPendingAudio(null);
     const matched = auditAudioMatches(
@@ -944,6 +1036,7 @@ function DiagnosticsWorkspace() {
           query={query}
           queryMode={queryMode}
           idColumn={idColumn}
+          derivedFolderColumns={folderColumnNames}
           sampleLabels={sampleLabels}
           relativePaths={relativePaths}
           numericColumns={numericColumns}
@@ -1182,7 +1275,7 @@ function DiagnosticsWorkspace() {
                         onChange={(e) => setAudioColumn(e.target.value)}
                       >
                         <option value="">音声列を選択してください</option>
-                        {data.columns.map((c) => (
+                        {sourceData.columns.map((c) => (
                           <option value={c} key={c}>
                             {c}
                           </option>
@@ -1219,50 +1312,25 @@ function DiagnosticsWorkspace() {
                           {previewAudit.repeated.length}件、相対パス重複{' '}
                           {pendingAudio.duplicates.length}件。
                         </p>
-                        {(
-                          [
-                            [
-                              '未対応のCSV行',
-                              previewAudit.missing.map(
-                                (item) =>
-                                  `${item.row}行目: ${item.expected || '空欄'}`,
-                              ),
-                            ],
-                            [
-                              '曖昧なCSV行',
-                              previewAudit.ambiguous.map(
-                                (item) =>
-                                  `${item.row}行目: ${item.candidates.join('、')}`,
-                              ),
-                            ],
-                            ['参照されないWAV', previewAudit.unused],
-                            [
-                              '複数行から参照されるWAV',
-                              previewAudit.repeated.map(
-                                (item) =>
-                                  `${item.key}: ${item.rows.join('、')}行目`,
-                              ),
-                            ],
-                            ['重複する相対パス', pendingAudio.duplicates],
-                            [
-                              '既存の対応が変わる行',
-                              pendingAudio.changed.map((row) => `${row}行目`),
-                            ],
-                          ] as [string, string[]][]
-                        )
-                          .filter(([, values]) => values.length)
-                          .map(([title, values]) => (
+                        {audioPreviewSections.map(
+                          ({ title, count, values }) => (
                             <details key={title}>
                               <summary>
-                                {title}（{values.length}）
+                                {title}（{count}）
                               </summary>
                               <ul>
                                 {values.map((value, index) => (
                                   <li key={`${index}-${value}`}>{value}</li>
                                 ))}
                               </ul>
+                              {count > values.length && (
+                                <p>
+                                  先頭{values.length}件を表示（全{count}件）
+                                </p>
+                              )}
                             </details>
-                          ))}
+                          ),
+                        )}
                         <div className="audio-import-actions">
                           <Button
                             onClick={attachAudio}
@@ -1293,23 +1361,38 @@ function DiagnosticsWorkspace() {
                         <p>
                           フォルダ階層は分析条件の列へ自動追加されます。群分け・絞り込みの選択は変わりません。
                         </p>
-                        {folderCandidates.map(({ level, values }) => {
-                          return (
-                            <div key={level} className="folder-attribute-row">
-                              <span>
-                                階層{level}：
-                                {folderAttributeColumn(sourceData, level)}
-                              </span>
-                              <small>
-                                {values
-                                  .map(
-                                    ([value, count]) => `${value} (${count})`,
-                                  )
-                                  .join('、')}
-                              </small>
-                            </div>
-                          );
-                        })}
+                        {folderCandidates.length > MAX_FOLDER_LEVELS && (
+                          <p role="alert">
+                            階層が{MAX_FOLDER_LEVELS}
+                            を超えています。表示・分析対象は先頭
+                            {MAX_FOLDER_LEVELS}
+                            階層です。フォルダ構造を浅くすると、すべての階層を追加できます。
+                          </p>
+                        )}
+                        {previewItems(folderCandidates, MAX_FOLDER_LEVELS).map(
+                          ({ level, values }) => {
+                            const visibleValues = previewItems(values, 20);
+                            const omittedValues =
+                              values.length - visibleValues.length;
+                            return (
+                              <div key={level} className="folder-attribute-row">
+                                <span>
+                                  階層{level}：
+                                  {folderAttributeColumn(sourceData, level)}
+                                </span>
+                                <small>
+                                  {visibleValues
+                                    .map(
+                                      ([value, count]) => `${value} (${count})`,
+                                    )
+                                    .join('、')}
+                                  {omittedValues > 0 &&
+                                    `、ほか${omittedValues}種類（全${values.length}種類）`}
+                                </small>
+                              </div>
+                            );
+                          },
+                        )}
                       </section>
                     )}
                     <p>
@@ -1353,12 +1436,14 @@ function DiagnosticsWorkspace() {
                       columns={profiles
                         .filter(
                           (p) =>
+                            sourceData.columns.includes(p.column) &&
                             p.numeric &&
                             p.column !== score &&
                             p.column !== idColumn &&
                             p.column !== audioColumn,
                         )
                         .map((p) => p.column)}
+                      sourceColumns={sourceData.columns}
                       result={review.workerResult}
                     >
                       {({

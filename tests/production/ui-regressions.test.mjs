@@ -385,7 +385,7 @@ test('saved pagination waits for the first worker result, clamps invalid pages a
   );
 });
 
-async function comparisonFixture(ready = true) {
+async function comparisonFixture(ready = true, sourceColumns) {
   const store = controller({
     comparisonColumn: 'auxiliary',
     tableSorting: [{ id: 'comparison-score:auxiliary', desc: true }],
@@ -404,6 +404,7 @@ async function comparisonFixture(ready = true) {
       h(ScoreComparison, {
         dataset: data,
         columns: ready ? ['auxiliary'] : [],
+        sourceColumns,
         samples,
         coverageRows: data.rows,
         scoreColumn: 'score',
@@ -461,6 +462,16 @@ test('explicitly hiding an optional descending score synchronizes fallback order
   assert.deepEqual(app.store.getSnapshot().active.record.state.tableSorting, [
     { id: 'score', desc: false },
   ]);
+});
+
+test('a saved comparison score from a derived folder column is no longer offered', async () => {
+  const app = await comparisonFixture(true, ['score', 'label']);
+  const select = app.tree.root.findByProps({ id: 'comparison-score' });
+  assert.equal(select.props.value, '');
+  assert.deepEqual(
+    select.findAllByType('option').map((option) => option.props.value),
+    [''],
+  );
 });
 
 test('two-stage excluded-only restoration preserves a valid page and keeps an empty-list reference restorable', async () => {

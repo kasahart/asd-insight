@@ -373,7 +373,9 @@ function audioBasenames<T>(files: Map<string, T>): Map<string, string[]> {
     index = new Map();
     for (const key of files.keys()) {
       const name = key.split('/').at(-1) ?? key;
-      index.set(name, [...(index.get(name) ?? []), key]);
+      const candidates = index.get(name);
+      if (candidates) candidates.push(key);
+      else index.set(name, [key]);
     }
     audioIndexes.set(files, index);
   }

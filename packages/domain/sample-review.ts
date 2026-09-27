@@ -1,4 +1,7 @@
 import type { Sample } from './data.ts';
+import type { Dataset } from './demo.ts';
+import type { FilterSpec, GroupSpec } from './data.ts';
+import { finiteNumber } from './distribution.ts';
 import { isDetected, type ThresholdRule } from './threshold.ts';
 
 export type ReviewFilter =
@@ -31,6 +34,69 @@ export type CandidateScope = {
   current: number;
   recovery: 'range' | 'search' | 'both' | null;
 };
+
+/** Preserve saved legacy scopes unless a folder-derived membership is active. */
+export function evaluationPopulationKey(
+  baseParts: readonly unknown[],
+  derivedPopulation: string,
+): string {
+  return JSON.stringify(
+    derivedPopulation ? [...baseParts, derivedPopulation] : baseParts,
+  );
+}
+
+/**
+ * Compactly tracks only whether derived grouping/filter values change the
+ * active comparison population. Other audio or folder changes keep the same
+ * threshold scope.
+ */
+export function derivedPopulationSignature(
+  dataset: Dataset,
+  group: GroupSpec,
+  conditionFilter: FilterSpec | null,
+  ignoredIndices: ReadonlySet<number>,
+  derivedColumns: readonly string[],
+): string {
+  const derived = new Set(derivedColumns);
+  if (
+    !derived.has(group.column) &&
+    !(conditionFilter && derived.has(conditionFilter.column))
+  )
+    return '';
+
+  let first = 0x811c9dc5;
+  let second = 0x9e3779b9;
+  let included = 0;
+  for (const [index, row] of dataset.rows.entries()) {
+    if (ignoredIndices.has(index)) continue;
+    const matchesFilter =
+      !conditionFilter ||
+      row[conditionFilter.column]?.trim() === conditionFilter.value;
+    let membership = 0;
+    if (matchesFilter) {
+      if (group.kind === 'category') {
+        const value = row[group.column]?.trim() ?? '';
+        membership =
+          value === group.a ? 1 : value === group.b ? 2 : value ? 3 : 4;
+      } else {
+        const value = finiteNumber(row[group.column]);
+        membership =
+          value === null
+            ? 4
+            : value <= group.upperA
+              ? 1
+              : value >= group.lowerB
+                ? 2
+                : 3;
+      }
+    }
+    const token = membership + ((index + 1) << 3);
+    first = Math.imul(first ^ token, 0x01000193);
+    second = Math.imul(second ^ (token + 0x7f4a7c15), 0x85ebca6b);
+    included++;
+  }
+  return `${included}:${first >>> 0}:${second >>> 0}`;
+}
 
 /** Scope counts use the same retained comparison population as the threshold. */
 export function candidateScope(

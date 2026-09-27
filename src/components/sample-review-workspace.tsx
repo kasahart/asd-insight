@@ -29,6 +29,8 @@ import {
   type ScoreRange,
 } from '@/lib/distribution';
 import {
+  derivedPopulationSignature,
+  evaluationPopulationKey,
   type CandidateScope,
   type ReviewCounts,
   type ReviewFilter,
@@ -198,6 +200,7 @@ export function SampleReviewWorkspace({
   query,
   queryMode = 'partial',
   idColumn,
+  derivedFolderColumns = [],
   sampleLabels,
   relativePaths,
   numericColumns,
@@ -218,6 +221,7 @@ export function SampleReviewWorkspace({
   /** Omitted by old callers/bundles to preserve the original partial match. */
   queryMode?: QueryMode;
   idColumn: string;
+  derivedFolderColumns?: readonly string[];
   sampleLabels?: readonly string[];
   relativePaths?: readonly string[];
   numericColumns?: readonly string[];
@@ -267,17 +271,40 @@ export function SampleReviewWorkspace({
     () => new Set(ignored.map((s) => s.rowIndex)),
     [ignored],
   );
-  const populationKey = JSON.stringify([
-    active!.record.datasetHash,
-    'evaluation-v1',
-    score,
-    group,
-    filterColumn,
-    filterValue,
-    [...ignoredIndices],
-    okGroup,
-    direction,
-  ]);
+  const derivedPopulation = useMemo(
+    () =>
+      derivedPopulationSignature(
+        dataset,
+        group,
+        filterColumn && filterValue
+          ? { column: filterColumn, value: filterValue }
+          : null,
+        ignoredIndices,
+        derivedFolderColumns,
+      ),
+    [
+      dataset,
+      group,
+      filterColumn,
+      filterValue,
+      ignoredIndices,
+      derivedFolderColumns,
+    ],
+  );
+  const populationKey = evaluationPopulationKey(
+    [
+      active!.record.datasetHash,
+      'evaluation-v1',
+      score,
+      group,
+      filterColumn,
+      filterValue,
+      [...ignoredIndices],
+      okGroup,
+      direction,
+    ],
+    derivedPopulation,
+  );
   const selection = setting?.scope === populationKey ? setting.selection : null;
   useEffect(() => {
     if (setting && setting.scope !== populationKey) {

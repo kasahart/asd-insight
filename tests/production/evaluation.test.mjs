@@ -8,6 +8,8 @@ import { histogram } from '../../packages/domain/distribution.ts';
 import { calibrateOkRate } from '../../packages/domain/threshold.ts';
 import { CSVColumnCountError } from '../../packages/domain/csv-diagnostics.ts';
 import { createEvaluationRuntime } from '../../packages/domain/evaluation-runtime.ts';
+import { parseCSV, csvText } from '../../packages/domain/data.ts';
+import { withFolderAttributes } from '../../packages/domain/audio-import.ts';
 import {
   createTable,
   getCoreRowModel,
@@ -34,6 +36,60 @@ const spec = {
   direction: 'high',
   bins: 4,
 };
+
+test('128 source columns plus folder attributes can be profiled and evaluated', () => {
+  const columns = [
+    'score',
+    'label',
+    'audio_file',
+    ...Array.from({ length: 125 }, (_, index) => `source_${index + 1}`),
+  ];
+  const sourceRows = [
+    { score: '0.1', label: 'OK', audio_file: 'device-a/normal/001.wav' },
+    { score: '0.9', label: 'NG', audio_file: 'device-b/abnormal/002.wav' },
+  ].map((base) =>
+    Object.fromEntries(columns.map((column) => [column, base[column] ?? ''])),
+  );
+  const source = parseCSV(csvText(columns, sourceRows), 'wide.csv');
+  assert.equal(source.columns.length, 128);
+
+  const attached = withFolderAttributes(
+    source,
+    '',
+    'audio_file',
+    new Map([
+      ['device-a/normal/001.wav', { name: '001.wav' }],
+      ['device-b/abnormal/002.wav', { name: '002.wav' }],
+    ]),
+    [1, 2],
+  );
+  assert.equal(attached.columns.length, 130);
+  const runtime = createEvaluationRuntime();
+  const profile = runtime({
+    workerGeneration: 1,
+    requestId: 1,
+    command: { kind: 'profile', datasetKey: 'wide', dataset: attached },
+  });
+  assert.equal(profile.ok, true);
+  assert.ok(
+    profile.result.some((entry) => entry.column === 'WAVフォルダ階層1'),
+  );
+  const evaluated = runtime({
+    workerGeneration: 1,
+    requestId: 2,
+    command: {
+      kind: 'evaluate',
+      datasetKey: 'wide',
+      spec: {
+        ...spec,
+        group: { kind: 'category', column: 'label', a: 'OK', b: 'NG' },
+      },
+    },
+  });
+  assert.equal(evaluated.ok, true);
+  assert.equal(evaluated.result.distribution.nA, 1);
+  assert.equal(evaluated.result.distribution.nB, 1);
+});
 
 test('automatic and explicit extents reject collapsed floating-point bins instead of hiding a cohort', () => {
   for (const [lo, hi] of [
