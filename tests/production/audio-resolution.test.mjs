@@ -12,6 +12,7 @@ import {
   audioListDisplay,
   auditAudioMatches,
   folderAttributeCandidates,
+  folderMembershipSignature,
   previewItems,
   sourceColumnSelection,
   summarizeAudioCandidates,
@@ -105,6 +106,21 @@ test('derived population signature follows active folder memberships only', () =
     ]),
     beforeFilterPopulation,
   );
+});
+
+test('folder membership signatures are deterministic and change with row placement', () => {
+  const rows = [
+    { score: '0.1', folder: '正常' },
+    { score: '0.9', folder: '要確認' },
+  ];
+  const signature = folderMembershipSignature(rows, ['folder']);
+  assert.match(signature, /^fm1-[0-9a-f]{16}$/);
+  assert.equal(folderMembershipSignature(rows, ['folder']), signature);
+  assert.notEqual(
+    folderMembershipSignature([rows[1], rows[0]], ['folder']),
+    signature,
+  );
+  assert.notEqual(folderMembershipSignature(rows, ['score']), signature);
 });
 
 test('preview rows are bounded and saved source-column choices ignore derived columns', () => {

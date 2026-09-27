@@ -34,6 +34,7 @@ import {
   audioListDisplay,
   folderAttributeCandidates,
   folderAttributeColumn,
+  folderMembershipSignature,
   previewItems,
   sourceColumnSelection,
   withFolderAttributes,
@@ -102,6 +103,7 @@ type AnalysisReportInput = {
   idColumn: string;
   audioColumn: string;
   adoptedFolderLevels: readonly number[];
+  folderColumns: readonly { column: string; level: number }[];
   range: ScoreRange | null;
   overlapOnly: boolean;
   query: string;
@@ -131,6 +133,7 @@ export function buildAnalysisReport(input: AnalysisReportInput) {
     idColumn,
     audioColumn,
     adoptedFolderLevels,
+    folderColumns,
     range,
     overlapOnly,
     query,
@@ -140,6 +143,23 @@ export function buildAnalysisReport(input: AnalysisReportInput) {
   const { distribution: d, comparison, visible } = review;
   const sampleId = (index: number) =>
     idColumn ? data.rows[index]?.[idColumn] : 'row-' + (index + 1);
+  const usedFolderColumns = folderColumns.filter(
+    ({ column }) =>
+      group.column === column ||
+      (filterValue !== '' && filterColumn === column),
+  );
+  const folderMembership = usedFolderColumns.length
+    ? {
+        algorithm: 'fnv1a32-pair-utf16-v1',
+        columns: usedFolderColumns.map(({ column }) => column),
+        levels: usedFolderColumns.map(({ level }) => level),
+        rowCount: data.rows.length,
+        signature: folderMembershipSignature(
+          data.rows,
+          usedFolderColumns.map(({ column }) => column),
+        ),
+      }
+    : null;
   return {
     application: 'ASD Insight',
     version: 6,
@@ -177,6 +197,7 @@ export function buildAnalysisReport(input: AnalysisReportInput) {
       idColumn,
       audioColumn,
       adoptedFolderLevels,
+      ...(folderMembership ? { folderMembership } : {}),
     },
     method: {
       name: 'Area under the precision-recall curve (trapezoidal)',
@@ -1013,6 +1034,10 @@ function DiagnosticsWorkspace() {
       idColumn,
       audioColumn,
       adoptedFolderLevels: folderLevels,
+      folderColumns: folderLevels.map((level, index) => ({
+        column: folderColumnNames[index],
+        level,
+      })),
       range,
       overlapOnly,
       query,
@@ -1537,6 +1562,12 @@ function DiagnosticsWorkspace() {
                                   idColumn,
                                   audioColumn,
                                   adoptedFolderLevels,
+                                  folderColumns: folderLevels.map(
+                                    (level, index) => ({
+                                      column: folderColumnNames[index],
+                                      level,
+                                    }),
+                                  ),
                                   range,
                                   overlapOnly,
                                   query,

@@ -293,6 +293,25 @@ test('高カーディナリティの数値風フォルダ名は全てカテゴ�
     await expect(filterValue.locator('option[value="201"]')).toHaveCount(1);
     await filterValue.selectOption('201');
     await expect(filterValue).toHaveValue('201');
+
+    const provenance = page.locator('.analysis-provenance');
+    await provenance.locator(':scope > summary').click();
+    await expect(
+      provenance.locator('.analysis-provenance-content'),
+    ).toBeVisible();
+    await provenance.locator('.provenance-json-details > summary').click();
+    const reportField = page.getByRole('textbox', { name: '確認用JSON' });
+    await expect(reportField).toBeVisible();
+    const report = JSON.parse(await reportField.inputValue());
+    expect(report.settings.folderMembership).toMatchObject({
+      algorithm: 'fnv1a32-pair-utf16-v1',
+      columns: [derivedColumn],
+      levels: [1],
+      rowCount: values,
+    });
+    expect(report.settings.folderMembership.signature).toMatch(
+      /^fm1-[0-9a-f]{16}$/,
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

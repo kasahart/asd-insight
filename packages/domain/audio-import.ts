@@ -86,6 +86,44 @@ export function folderAttributeColumn(
   return unusedColumn(`WAVフォルダ階層${level}`, [...data.columns]);
 }
 
+/** Stable compact identity for the row-to-folder memberships in a report. */
+export function folderMembershipSignature(
+  rows: readonly DataRow[],
+  columns: readonly string[],
+): string {
+  let first = 0x811c9dc5;
+  let second = 0x9e3779b9;
+  const feedByte = (byte: number) => {
+    first = Math.imul(first ^ byte, 0x01000193) >>> 0;
+    second = Math.imul(second ^ byte, 0x85ebca6b) >>> 0;
+  };
+  const feedNumber = (value: number) => {
+    for (let shift = 0; shift < 32; shift += 8)
+      feedByte((value >>> shift) & 0xff);
+  };
+  const feedString = (value: string) => {
+    feedNumber(value.length);
+    for (let index = 0; index < value.length; index++) {
+      const code = value.charCodeAt(index);
+      feedByte(code & 0xff);
+      feedByte(code >>> 8);
+    }
+  };
+
+  feedString('folder-membership-v1');
+  feedNumber(columns.length);
+  for (const column of columns) feedString(column);
+  feedNumber(rows.length);
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+    feedNumber(rowIndex);
+    const row = rows[rowIndex];
+    for (const column of columns) feedString(row[column] ?? '');
+  }
+  return `fm1-${first.toString(16).padStart(8, '0')}${second
+    .toString(16)
+    .padStart(8, '0')}`;
+}
+
 /** Labels used by the inspection list; these are never dataset attributes. */
 export function audioListDisplay<T>(
   row: DataRow,
@@ -177,10 +215,11 @@ export function withFolderAttributes<T>(
     rows: data.rows.map((row, index) => {
       const key = resolveAudio(row, index, idColumn, audioColumn, files).key;
       const directories = key?.split('/').slice(0, -1) ?? [];
-      return Object.fromEntries([
-        ...Object.entries(row),
-        ...levels.map((level, i) => [columns[i], directories[level - 1] ?? '']),
-      ]);
+      const augmentedRow = { ...row };
+      for (let levelIndex = 0; levelIndex < levels.length; levelIndex++)
+        augmentedRow[columns[levelIndex]] =
+          directories[levels[levelIndex] - 1] ?? '';
+      return augmentedRow;
     }),
   };
 }
