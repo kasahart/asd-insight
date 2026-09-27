@@ -29,6 +29,8 @@ export function sortReviewSamples(
   samples: readonly Sample[],
   sort?: EvaluationListSort,
   idColumn?: string,
+  sampleLabels?: readonly string[],
+  relativePaths?: readonly string[],
 ): readonly Sample[] {
   if (!sort) return samples;
   const builtin = sort.source !== 'row';
@@ -46,10 +48,11 @@ export function sortReviewSamples(
         : builtin && sort.column === '__group'
           ? sample.group
           : builtin && sort.column === '__sample'
-            ? idColumn
-              ? sample.row[idColumn]
-              : `row-${sample.index + 1}`
-            : sample.row[sort.column];
+            ? (sampleLabels?.[sample.index] ??
+              (idColumn ? sample.row[idColumn] : `row-${sample.index + 1}`))
+            : builtin && sort.column === '__path'
+              ? (relativePaths?.[sample.index] ?? '')
+              : sample.row[sort.column];
     const value =
       kind === 'number' ? finiteNumber(String(raw)) : String(raw).toLowerCase();
     return {

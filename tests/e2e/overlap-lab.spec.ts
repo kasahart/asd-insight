@@ -124,7 +124,9 @@ async function visiblePageScores(page: Page) {
   return page
     .locator('tbody[aria-label="一覧の表示ページ"] tr')
     .evaluateAll((rows) =>
-      rows.map((row) => Number(row.cells[2]?.textContent?.trim() ?? NaN)),
+      rows.map((row) =>
+        Number(row.querySelector('.number-cell')?.textContent?.trim() ?? NaN),
+      ),
     );
 }
 
@@ -178,11 +180,7 @@ test('数値で指定した分布範囲が一覧の候補に連動する', async
   const rangeCount = await listedCount(page);
   expect(rangeCount).toBeGreaterThan(0);
 
-  const visibleScores = await page
-    .locator('tbody[aria-label="一覧の表示ページ"] tr')
-    .evaluateAll((rows) =>
-      rows.map((row) => Number(row.cells[2]?.textContent?.trim() ?? NaN)),
-    );
+  const visibleScores = await visiblePageScores(page);
   expect(visibleScores.length).toBeGreaterThan(0);
   expect(visibleScores.every((score) => score >= 0.2 && score <= 0.4)).toBe(
     true,

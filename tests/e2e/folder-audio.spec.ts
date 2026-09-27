@@ -4,8 +4,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Buffer } from 'node:buffer';
 
-test('階層WAVの取り込み前照合と明示的な属性採用', async ({ page }) => {
+test('階層WAVの自動属性化と一覧での対応状況', async ({ page }) => {
   const root = await mkdtemp(join(tmpdir(), 'asd-insight-folder-'));
+  let persistent = true;
   try {
     for (const path of ['正常/設備A', '要確認/設備B']) {
       await mkdir(join(root, path), { recursive: true });
@@ -19,6 +20,7 @@ test('階層WAVの取り込み前照合と明示的な属性採用', async ({ pa
     try {
       await expect(openData).toBeVisible({ timeout: 15_000 });
     } catch {
+      persistent = false;
       await page.getByRole('button', { name: '保存せず一時利用' }).click();
       await expect(openData).toBeVisible();
     }
@@ -40,10 +42,16 @@ test('階層WAVの取り込み前照合と明示的な属性採用', async ({ pa
     const preview = page.getByRole('region', { name: '音声の取り込み前確認' });
     await expect(preview).toContainText('対応 2行、未対応 1行、曖昧 1行');
     await expect(
-      page.getByRole('region', { name: 'WAVフォルダの属性候補' }),
+      page.getByRole('region', { name: 'WAVフォルダ階層' }),
     ).toContainText('正常');
+    await expect(page.locator('#id-column')).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: '試聴用の音声を追加' }),
+    ).toHaveCount(0);
     await expect(page.locator('#group-column')).toHaveValue('group');
-    await page.getByRole('checkbox', { name: '階層1を分析条件に採用' }).check();
+    await expect(
+      page.getByRole('checkbox', { name: /階層1を分析条件に採用/ }),
+    ).toHaveCount(0);
     await preview.getByRole('button', { name: '確認して追加' }).click();
     await expect(page.locator('.audio-import-control')).toContainText(
       '2 / 4件',
@@ -52,6 +60,72 @@ test('階層WAVの取り込み前照合と明示的な属性採用', async ({ pa
     await expect(
       page.locator('#group-column option[value="WAVフォルダ階層1"]'),
     ).toHaveCount(1);
+    await expect(
+      page.locator('#group-column option[value="WAVフォルダ階層2"]'),
+    ).toHaveCount(1);
+    await expect(
+      page.locator('#filter-column option[value="WAVフォルダ階層1"]'),
+    ).toHaveCount(1);
+    const table = page.getByRole('region', {
+      name: 'サンプル一覧の横スクロール領域',
+    });
+    await expect(
+      table.getByRole('columnheader', { name: /ファイル名/ }),
+    ).toBeVisible();
+    await expect(
+      table.getByRole('columnheader', { name: /相対パス/ }),
+    ).toBeVisible();
+    await expect(
+      table.getByRole('columnheader', { name: /sample_id/ }),
+    ).toBeVisible();
+    await expect(
+      table.getByRole('columnheader', { name: /audio_file/ }),
+    ).toBeVisible();
+    await expect(
+      table.getByRole('columnheader', { name: /WAVフォルダ階層1/ }),
+    ).toBeVisible();
+    await expect(
+      table.getByText('正常/設備A/001.wav', { exact: true }).first(),
+    ).toBeVisible();
+    await expect(
+      table.getByText('曖昧: 同名WAVが複数あります', { exact: true }).first(),
+    ).toBeVisible();
+    await expect(
+      table
+        .getByText('未対応: 対応するWAVがありません', { exact: true })
+        .first(),
+    ).toBeVisible();
+    await table.getByRole('button', { name: /相対パス：.*昇順にする/ }).click();
+    await expect(
+      table.getByRole('columnheader', { name: /相対パス/ }),
+    ).toHaveAttribute('aria-sort', 'ascending');
+    const search = page.getByLabel('ファイル名・相対パスで検索');
+    await search.fill('正常/設備A/001.wav');
+    await expect(
+      page.getByRole('heading', { name: /^サンプル一覧/ }),
+    ).toContainText('1件');
+    await search.fill('');
+    if (persistent) {
+      await expect(
+        page.getByRole('button', { name: /保存状態と分析を管理/ }),
+      ).toContainText('端末に保存済み', { timeout: 20_000 });
+      await page.reload();
+      await page
+        .getByRole('button', { name: 'データを選ぶ', exact: true })
+        .click();
+      const saved = page
+        .getByRole('dialog', { name: 'データと保存した分析' })
+        .getByRole('region', { name: '保存した分析' })
+        .getByRole('listitem')
+        .filter({ hasText: 'folders.csv' });
+      await saved.getByRole('button', { name: '開く', exact: true }).click();
+      await expect(
+        page.locator('#group-column option[value="WAVフォルダ階層2"]'),
+      ).toHaveCount(1);
+      await expect(
+        page.getByRole('columnheader', { name: /相対パス/ }),
+      ).toHaveAttribute('aria-sort', 'ascending');
+    }
   } finally {
     await rm(root, { recursive: true, force: true });
   }

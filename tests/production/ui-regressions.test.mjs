@@ -343,21 +343,21 @@ test('manual pagination shares pinned columns, renders at most eight page rows a
 test('native full-cell sort controls alternate two states, reset pages and persist ordering on reopen', async () => {
   const app = await tableFixture({ selectedSample: null });
   await click(button(app.tree, '次のページ'));
-  await click(sortButton(app.tree, 'サンプル名'));
-  assert.equal(sortButton(app.tree, 'サンプル名').props.type, 'button');
-  assert.equal(sortButton(app.tree, 'サンプル名').props['data-sort'], 'asc');
+  await click(sortButton(app.tree, 'ファイル名'));
+  assert.equal(sortButton(app.tree, 'ファイル名').props.type, 'button');
+  assert.equal(sortButton(app.tree, 'ファイル名').props['data-sort'], 'asc');
   assert.equal(names(app.tree)[0], 'sample-0.wav');
   assert.match(text(footer(app.tree)), /1 \/ 3/);
-  await click(sortButton(app.tree, 'サンプル名'));
-  assert.equal(sortButton(app.tree, 'サンプル名').props['data-sort'], 'desc');
+  await click(sortButton(app.tree, 'ファイル名'));
+  assert.equal(sortButton(app.tree, 'ファイル名').props['data-sort'], 'desc');
   assert.equal(names(app.tree)[0], 'sample-17.wav');
   await click(button(app.tree, '次のページ'));
   await app.reopen();
   assert.match(text(footer(app.tree)), /2 \/ 3/);
   assert.equal(names(app.tree)[0], 'sample-9.wav');
-  assert.equal(sortButton(app.tree, 'サンプル名').props['data-sort'], 'desc');
-  await click(sortButton(app.tree, 'サンプル名'));
-  assert.equal(sortButton(app.tree, 'サンプル名').props['data-sort'], 'asc');
+  assert.equal(sortButton(app.tree, 'ファイル名').props['data-sort'], 'desc');
+  await click(sortButton(app.tree, 'ファイル名'));
+  assert.equal(sortButton(app.tree, 'ファイル名').props['data-sort'], 'asc');
 });
 
 test('saved pagination waits for the first worker result, clamps invalid pages and resets for filtering', async () => {

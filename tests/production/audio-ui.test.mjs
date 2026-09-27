@@ -300,7 +300,7 @@ test('missing audio explains the resolver evidence and opens its settings', asyn
   assert.ok(text(renderer.root).includes('normal03.wav'));
   const settings = renderer.root
     .findAllByType('button')
-    .find((node) => text(node) === 'サンプル名・試聴音声の設定を開く');
+    .find((node) => text(node) === '試聴音声の設定を開く');
   assert.ok(settings);
   await act(async () => settings.props.onClick());
   assert.equal(opened, 1);

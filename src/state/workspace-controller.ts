@@ -144,8 +144,7 @@ export class WorkspaceController {
     const value = typeof update === 'function' ? update(previous) : update;
     if (Object.is(value, previous)) return;
     const state = { ...active.record.state, [key]: value };
-    if (key === 'idColumn' || key === 'audioColumn')
-      delete state.audioAnalyses;
+    if (key === 'idColumn' || key === 'audioColumn') delete state.audioAnalyses;
     validateApplicationState(
       state,
       active.dataset.rows.length,
@@ -948,11 +947,17 @@ export function validateApplicationState(
       bool(s.desc, 'tableSorting');
       if (used.has(s.id)) invalid('tableSorting');
       used.add(s.id);
-      if (!['sample', 'group', 'score', 'attribute'].includes(s.id)) {
-        if (!s.id.startsWith('comparison-score:') || !s.id.slice(17))
-          invalid('tableSorting');
+      if (
+        ['sample', 'relative-path', 'group', 'score', 'attribute'].includes(
+          s.id,
+        )
+      )
+        continue;
+      if (s.id.startsWith('comparison-score:') && s.id.slice(17))
         column(s.id.slice(17), 'tableSorting');
-      }
+      else if (s.id.startsWith('data:') && s.id.slice(5))
+        column(s.id.slice(5), 'tableSorting');
+      else invalid('tableSorting');
     }
   }
   for (const name of ['pagination'])

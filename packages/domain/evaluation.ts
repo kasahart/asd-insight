@@ -85,6 +85,14 @@ function validateSpec(dataset: Dataset, spec: EvaluationSpec): void {
   if (spec.conditionFilter?.column) requireColumn(spec.conditionFilter.column);
   if (spec.comparisonScoreColumn) requireColumn(spec.comparisonScoreColumn);
   if (spec.list?.idColumn) requireColumn(spec.list.idColumn);
+  for (const labels of [spec.list?.sampleLabels, spec.list?.relativePaths])
+    if (
+      labels !== undefined &&
+      (!Array.isArray(labels) ||
+        labels.length !== dataset.rows.length ||
+        labels.some((label) => typeof label !== 'string'))
+    )
+      throw new Error('一覧の音声表示を確認してください。');
   if (
     spec.list?.queryMode !== undefined &&
     spec.list.queryMode !== 'partial' &&
@@ -103,7 +111,7 @@ function validateSpec(dataset: Dataset, spec: EvaluationSpec): void {
       throw new Error('一覧の並び順の指定を確認してください。');
     if (
       sort.source === 'row' ||
-      !['__score', '__group', '__sample'].includes(sort.column)
+      !['__score', '__group', '__sample', '__path'].includes(sort.column)
     )
       requireColumn(sort.column);
   }
@@ -264,10 +272,17 @@ export function evaluateDataset(
   const matchesSearch = (sample: Sample) =>
     !query ||
     (() => {
-      const label = (
-        list.idColumn ? sample.row[list.idColumn] : `row-${sample.index + 1}`
-      ).toLowerCase();
-      return queryMode === 'exact' ? label === query : label.includes(query);
+      const labels = list.sampleLabels
+        ? [list.sampleLabels[sample.index], list.relativePaths?.[sample.index]]
+        : [
+            list.idColumn
+              ? sample.row[list.idColumn]
+              : `row-${sample.index + 1}`,
+          ];
+      return labels.some((value) => {
+        const label = (value ?? '').toLowerCase();
+        return queryMode === 'exact' ? label === query : label.includes(query);
+      });
     })();
   // Excluded recordings remain restorable even when no longer in an overlap bin.
   const beforeDecision = base.samples.filter(
@@ -290,7 +305,13 @@ export function evaluateDataset(
     (sample) => inRange(sample) && inOverlap(sample),
     matchesSearch,
   );
-  const sorted = sortReviewSamples(listing.listed, list.sort, list.idColumn);
+  const sorted = sortReviewSamples(
+    listing.listed,
+    list.sort,
+    list.idColumn,
+    list.sampleLabels,
+    list.relativePaths,
+  );
   return {
     baseline: compactPartition(dataset, base, new Set()),
     comparison: compactPartition(dataset, retained, ignored),

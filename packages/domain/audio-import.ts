@@ -1,4 +1,4 @@
-import type { Dataset } from './demo.ts';
+import type { DataRow, Dataset } from './demo.ts';
 import { resolveAudio, unusedColumn } from './data.ts';
 
 export type AudioAudit = ReturnType<typeof auditAudioMatches>;
@@ -59,7 +59,31 @@ export function folderAttributeColumn(
   return unusedColumn(`WAVフォルダ階層${level}`, [...data.columns]);
 }
 
-/** Adds only explicitly adopted attributes; source CSV rows remain untouched. */
+/** Labels used by the inspection list; these are never dataset attributes. */
+export function audioListDisplay<T>(
+  row: DataRow,
+  index: number,
+  idColumn: string,
+  audioColumn: string,
+  files: Map<string, T>,
+) {
+  const match = resolveAudio(row, index, idColumn, audioColumn, files);
+  if (match.key) {
+    const parts = match.key.split('/');
+    return { filename: parts.at(-1) ?? match.key, path: match.key, status: '' };
+  }
+  const status =
+    match.reason === 'ambiguous'
+      ? '曖昧: 同名WAVが複数あります'
+      : match.reason === 'audio-column-empty'
+        ? '未対応: 音声列が空欄です'
+        : match.reason === 'no-files'
+          ? '未対応: WAVフォルダが未指定です'
+          : '未対応: 対応するWAVがありません';
+  return { filename: `行${index + 1}（${status}）`, path: status, status };
+}
+
+/** Adds folder attributes automatically; source CSV rows remain untouched. */
 export function withFolderAttributes<T>(
   data: Dataset,
   idColumn: string,

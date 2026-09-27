@@ -283,12 +283,8 @@ export function AudioInspector({
           <p>対応する音声がありません</p>
           <small>{audioResolutionMessage(audioResolution)}</small>
           {onOpenAudioSettings && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onOpenAudioSettings}
-            >
-              サンプル名・試聴音声の設定を開く
+            <Button variant="outline" size="sm" onClick={onOpenAudioSettings}>
+              試聴音声の設定を開く
             </Button>
           )}
         </div>

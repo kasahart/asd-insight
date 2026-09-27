@@ -6,6 +6,7 @@ import {
   resolveAudio,
 } from '../../packages/domain/data.ts';
 import {
+  audioListDisplay,
   auditAudioMatches,
   folderAttributeCandidates,
   withFolderAttributes,
@@ -145,6 +146,26 @@ test('folder keys distinguish equal names, and basename-only references require 
       new Map([['正常/設備A/001.wav', normal]]),
     ).file,
     normal,
+  );
+  assert.deepEqual(
+    audioListDisplay(
+      { audio_file: '正常/設備A/001.wav' },
+      0,
+      '',
+      'audio_file',
+      files,
+    ),
+    { filename: '001.wav', path: '正常/設備A/001.wav', status: '' },
+  );
+  assert.match(
+    audioListDisplay({ audio_file: '001.wav' }, 2, '', 'audio_file', files)
+      .path,
+    /曖昧: 同名WAVが複数/,
+  );
+  assert.match(
+    audioListDisplay({ audio_file: 'missing.wav' }, 3, '', 'audio_file', files)
+      .filename,
+    /行4（未対応: 対応するWAVがありません）/,
   );
 });
 

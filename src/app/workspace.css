@@ -832,6 +832,13 @@
   color: var(--muted-foreground);
   font-size: 12px;
 }
+.audio-path-cell {
+  min-width: 210px;
+  max-width: 360px;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+}
 .aggregation-status {
   display: flex;
   align-items: center;

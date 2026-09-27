@@ -291,7 +291,7 @@ test('320px keeps search, table scrolling, sorting, and score cells usable', asy
   await page.setViewportSize({ width: 320, height: 900 });
   await openDemo(page);
 
-  const query = page.getByLabel('サンプル名で検索', { exact: true });
+  const query = page.getByLabel('ファイル名・相対パスで検索', { exact: true });
   const queryLabel = page.locator('.sample-query-control > label').first();
   const labelBox = await queryLabel.boundingBox();
   const helperBox = await queryLabel.locator('span').boundingBox();
@@ -304,9 +304,9 @@ test('320px keeps search, table scrolling, sorting, and score cells usable', asy
 
   await page.getByLabel('検索一致方法', { exact: true }).selectOption('exact');
   await query.fill('DEMO-0001');
-  await expect(page.getByRole('heading', { name: /^サンプル一覧/ })).toContainText(
-    '1件',
-  );
+  await expect(
+    page.getByRole('heading', { name: /^サンプル一覧/ }),
+  ).toContainText('1件');
   await expect
     .poll(() =>
       page.evaluate(
@@ -316,7 +316,9 @@ test('320px keeps search, table scrolling, sorting, and score cells usable', asy
     .toBe(true);
 
   await query.fill('');
-  await page.getByLabel('検索一致方法', { exact: true }).selectOption('partial');
+  await page
+    .getByLabel('検索一致方法', { exact: true })
+    .selectOption('partial');
   await expect(page.locator('main.main-panel')).toHaveAttribute(
     'aria-busy',
     'false',
@@ -350,21 +352,17 @@ test('320px keeps search, table scrolling, sorting, and score cells usable', asy
   await expect(scoreHeader).toBeVisible();
   await scoreHeader.focus();
   await expect(scoreHeader).toBeFocused();
-  const ascendingFirst = Number(
-    await firstScoreCell.innerText(),
-  );
+  const ascendingFirst = Number(await firstScoreCell.innerText());
   await page.keyboard.press('Enter');
   await expect(scoreColumn).toHaveAttribute('aria-sort', 'descending');
   await firstScoreCell.scrollIntoViewIfNeeded();
-  const descendingFirst = Number(
-    await firstScoreCell.innerText(),
-  );
+  const descendingFirst = Number(await firstScoreCell.innerText());
   expect(descendingFirst).toBeGreaterThan(ascendingFirst);
 
   const unobscured = await page.evaluate(() => {
-    const scoreCell = document.querySelector(
-      'tbody[aria-label="一覧の表示ページ"] .number-cell',
-    )?.closest('td');
+    const scoreCell = document
+      .querySelector('tbody[aria-label="一覧の表示ページ"] .number-cell')
+      ?.closest('td');
     const region = document.querySelector<HTMLElement>(
       '[aria-label="サンプル一覧の横スクロール領域"]',
     );

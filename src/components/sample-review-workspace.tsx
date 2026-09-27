@@ -198,6 +198,9 @@ export function SampleReviewWorkspace({
   query,
   queryMode = 'partial',
   idColumn,
+  sampleLabels,
+  relativePaths,
+  numericColumns,
   selectedIndex,
   labelA = '群A',
   labelB = '群B',
@@ -215,6 +218,9 @@ export function SampleReviewWorkspace({
   /** Omitted by old callers/bundles to preserve the original partial match. */
   queryMode?: QueryMode;
   idColumn: string;
+  sampleLabels?: readonly string[];
+  relativePaths?: readonly string[];
+  numericColumns?: readonly string[];
   selectedIndex: number | null;
   labelA?: string;
   labelB?: string;
@@ -298,21 +304,29 @@ export function SampleReviewWorkspace({
       ? displayedComparison
       : sort.id === 'attribute'
         ? group.column
-        : '';
+        : sort.id.startsWith('data:')
+          ? sort.id.slice('data:'.length)
+          : '';
     const mapped: NonNullable<EvaluationListSpec['sort']> = sourceColumn
       ? {
           column: sourceColumn,
           desc: sort.desc,
           source: 'row',
-          kind: sort.id === 'attribute' ? 'alphanumeric' : 'number',
+          kind:
+            sort.id.startsWith('comparison-score:') ||
+            numericColumns?.includes(sourceColumn)
+              ? 'number'
+              : 'alphanumeric',
         }
       : {
           column:
             sort.id === 'sample'
               ? '__sample'
-              : sort.id === 'group'
-                ? '__group'
-                : '__score',
+              : sort.id === 'relative-path'
+                ? '__path'
+                : sort.id === 'group'
+                  ? '__group'
+                  : '__score',
           desc:
             sort.id.startsWith('comparison-score:') && !sourceColumn
               ? false
@@ -339,6 +353,8 @@ export function SampleReviewWorkspace({
         query,
         queryMode,
         idColumn,
+        sampleLabels,
+        relativePaths,
         decisionFilter: filter,
         sort: mapped,
       },
@@ -361,6 +377,9 @@ export function SampleReviewWorkspace({
     query,
     queryMode,
     idColumn,
+    sampleLabels,
+    relativePaths,
+    numericColumns,
     filter,
     sorting,
   ]);
@@ -571,7 +590,9 @@ export function SampleReviewWorkspace({
   }
   const distribution = result?.distribution ?? emptyDistribution;
   const calculationTotal =
-    !pending && execution.result ? execution.result.comparison.samples.length : null;
+    !pending && execution.result
+      ? execution.result.comparison.samples.length
+      : null;
   const listingTotal =
     !pending && execution.result
       ? execution.result.listing.listedIndices.length

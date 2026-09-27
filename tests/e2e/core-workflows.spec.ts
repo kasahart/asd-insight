@@ -143,7 +143,9 @@ function isDescending(values: number[]): boolean {
   );
 }
 
-test('仮しきい値からOK基準群のNG候補・反対群のOK候補と一覧が連動する', async ({ page }) => {
+test('仮しきい値からOK基準群のNG候補・反対群のOK候補と一覧が連動する', async ({
+  page,
+}) => {
   await openDemo(page);
 
   await expect(
@@ -306,7 +308,7 @@ test('サンプル名検索とページ送りが一覧件数に反映される',
   const sampleId = await firstDisplayed.getAttribute('title');
   expect(sampleId).toMatch(/^DEMO-\d{4}$/);
 
-  const query = page.getByLabel('サンプル名で検索', { exact: true });
+  const query = page.getByLabel('ファイル名・相対パスで検索', { exact: true });
   await query.fill(sampleId!);
   await expect.poll(() => listedCount(page)).toBe(1);
   await expect(

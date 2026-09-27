@@ -53,6 +53,8 @@ function sameSample(left: Sample, right: Sample): boolean {
 export function SampleTable({
   samples,
   idColumn,
+  datasetColumns = [],
+  audioDisplay,
   scoreColumn,
   comparisonColumn,
   groupColumn,
@@ -66,6 +68,8 @@ export function SampleTable({
 }: {
   samples: Sample[];
   idColumn: string;
+  datasetColumns?: readonly string[];
+  audioDisplay?: readonly { filename: string; path: string; status: string }[];
   scoreColumn: string;
   comparisonColumn: string;
   groupColumn: string;
@@ -98,16 +102,16 @@ export function SampleTable({
   ]);
   const comparisonColumnId = 'comparison-score:' + comparisonColumn;
   const effectiveSorting = useMemo(() => {
-    const available = sorting.flatMap((sort) =>
-      sort.id.startsWith('comparison-score:')
-        ? comparisonColumn
-          ? [{ ...sort, id: comparisonColumnId }]
-          : []
-        : [sort],
-    );
+    const available = sorting.flatMap((sort) => {
+      if (sort.id.startsWith('comparison-score:'))
+        return comparisonColumn ? [{ ...sort, id: comparisonColumnId }] : [];
+      if (sort.id.startsWith('data:'))
+        return datasetColumns.includes(sort.id.slice(5)) ? [sort] : [];
+      return [sort];
+    });
     // Removing an optional score column still leaves an explicit, stable order.
     return available.length ? available : [{ id: 'score', desc: false }];
-  }, [sorting, comparisonColumn, comparisonColumnId]);
+  }, [sorting, comparisonColumn, comparisonColumnId, datasetColumns]);
   const sortingKey = JSON.stringify(effectiveSorting);
   const ignoredKey = useMemo(
     () => [...ignoredIndices].join(','),
@@ -147,8 +151,9 @@ export function SampleTable({
       {
         id: 'sample',
         accessorFn: (s) =>
-          idColumn ? s.row[idColumn] : 'row-' + (s.index + 1),
-        header: 'サンプル名',
+          audioDisplay?.[s.index]?.filename ??
+          (idColumn ? s.row[idColumn] : 'row-' + (s.index + 1)),
+        header: 'ファイル名',
         cell: (ctx) => (
           <button
             type="button"
@@ -174,6 +179,23 @@ export function SampleTable({
           </button>
         ),
       },
+      ...(audioDisplay
+        ? [
+            {
+              id: 'relative-path',
+              accessorFn: (s: Sample) => audioDisplay[s.index]?.path ?? '',
+              header: '相対パス',
+              cell: (ctx: { getValue: () => unknown }) => (
+                <span
+                  className="attribute-cell audio-path-cell"
+                  title={String(ctx.getValue())}
+                >
+                  {String(ctx.getValue())}
+                </span>
+              ),
+            } satisfies ColumnDef<Sample>,
+          ]
+        : []),
       {
         accessorKey: 'group',
         header: '比較群',
@@ -211,9 +233,9 @@ export function SampleTable({
         cell: (ctx) => {
           const sample = ctx.row.original;
           const ignored = ignoredIndices.has(sample.index);
-          const label = idColumn
-            ? sample.row[idColumn]
-            : 'row-' + (sample.index + 1);
+          const label =
+            audioDisplay?.[sample.index]?.filename ??
+            (idColumn ? sample.row[idColumn] : 'row-' + (sample.index + 1));
           return (
             <div className="aggregation-status">
               <span className="aggregation-status-label">
@@ -250,9 +272,25 @@ export function SampleTable({
           <ScoreValue value={ctx.row.original.row[comparisonColumn]} />
         ),
       });
+    const shown = new Set([scoreColumn, groupColumn, comparisonColumn]);
+    for (const column of datasetColumns) {
+      if (shown.has(column)) continue;
+      result.splice(result.length - 1, 0, {
+        id: `data:${column}`,
+        accessorFn: (sample) => sample.row[column],
+        header: column,
+        cell: (ctx) => (
+          <span className="attribute-cell" title={ctx.getValue<string>() ?? ''}>
+            {ctx.getValue<string>() || '—'}
+          </span>
+        ),
+      });
+    }
     return result;
   }, [
     idColumn,
+    datasetColumns,
+    audioDisplay,
     scoreColumn,
     comparisonColumn,
     comparisonColumnId,
@@ -411,99 +449,99 @@ export function SampleTable({
           tabIndex: 0,
         }}
       >
-          <TableHeader>
-            {table.getHeaderGroups().map((g) => (
-              <TableRow key={g.id}>
-                {g.headers.map((h) => {
-                  const direction = h.column.getIsSorted();
-                  const nextDirection = h.column.getNextSortingOrder();
-                  const headerLabel =
-                    typeof h.column.columnDef.header === 'string'
-                      ? h.column.columnDef.header
-                      : h.column.id;
-                  const directionLabel =
-                    direction === 'asc'
-                      ? '昇順'
-                      : direction === 'desc'
-                        ? '降順'
-                        : '未指定';
-                  const nextAction =
-                    nextDirection === 'desc' ? '降順にする' : '昇順にする';
-                  return (
-                    <TableHead
-                      key={h.id}
-                      title={headerLabel}
-                      aria-sort={
-                        h.column.getCanSort()
-                          ? direction === 'asc'
-                            ? 'ascending'
-                            : direction === 'desc'
-                              ? 'descending'
-                              : 'none'
+        <TableHeader>
+          {table.getHeaderGroups().map((g) => (
+            <TableRow key={g.id}>
+              {g.headers.map((h) => {
+                const direction = h.column.getIsSorted();
+                const nextDirection = h.column.getNextSortingOrder();
+                const headerLabel =
+                  typeof h.column.columnDef.header === 'string'
+                    ? h.column.columnDef.header
+                    : h.column.id;
+                const directionLabel =
+                  direction === 'asc'
+                    ? '昇順'
+                    : direction === 'desc'
+                      ? '降順'
+                      : '未指定';
+                const nextAction =
+                  nextDirection === 'desc' ? '降順にする' : '昇順にする';
+                return (
+                  <TableHead
+                    key={h.id}
+                    title={headerLabel}
+                    aria-sort={
+                      h.column.getCanSort()
+                        ? direction === 'asc'
+                          ? 'ascending'
+                          : direction === 'desc'
+                            ? 'descending'
+                            : 'none'
+                        : undefined
+                    }
+                    className={
+                      h.column.getCanSort()
+                        ? 'sortable-header'
+                        : h.column.id === 'aggregation'
+                          ? 'aggregation-cell'
                           : undefined
-                      }
-                      className={
-                        h.column.getCanSort()
-                          ? 'sortable-header'
-                          : h.column.id === 'aggregation'
-                            ? 'aggregation-cell'
-                            : undefined
-                      }
-                    >
-                      {h.column.getCanSort() ? (
-                        <button
-                          type="button"
-                          className="table-sort"
-                          data-sort={direction || 'none'}
-                          aria-label={`${headerLabel}：${directionLabel}。${nextAction}`}
-                          onClick={h.column.getToggleSortingHandler()}
+                    }
+                  >
+                    {h.column.getCanSort() ? (
+                      <button
+                        type="button"
+                        className="table-sort"
+                        data-sort={direction || 'none'}
+                        aria-label={`${headerLabel}：${directionLabel}。${nextAction}`}
+                        onClick={h.column.getToggleSortingHandler()}
+                      >
+                        <span className="table-sort-label">
+                          {flexRender(
+                            h.column.columnDef.header,
+                            h.getContext(),
+                          )}
+                        </span>
+                        <span
+                          className="table-sort-direction"
+                          aria-hidden="true"
                         >
-                          <span className="table-sort-label">
-                            {flexRender(
-                              h.column.columnDef.header,
-                              h.getContext(),
-                            )}
-                          </span>
-                          <span
-                            className="table-sort-direction"
-                            aria-hidden="true"
-                          >
-                            {direction ? (
-                              <>
-                                {direction === 'asc' ? (
-                                  <ArrowUp size={14} />
-                                ) : (
-                                  <ArrowDown size={14} />
-                                )}
-                                <span>{directionLabel}</span>
-                              </>
-                            ) : (
-                              <ArrowDownUp size={12} />
-                            )}
-                          </span>
-                        </button>
-                      ) : (
-                        flexRender(h.column.columnDef.header, h.getContext())
-                      )}
-                    </TableHead>
-                  );
-                })}
-              </TableRow>
-            ))}
-          </TableHeader>
-          {selectedReference && (
-            <TableBody aria-label="選択中のサンプル（参照）">
-              {renderRow(selectedReference, true)}
-            </TableBody>
-          )}
-          <TableBody aria-label="一覧の表示ページ">
-            {table
-              .getRowModel()
-              .rows.filter(
-                (row) => !selectedReference || row.original.index !== selected,
-              )
-              .map((row) => renderRow(row))}
+                          {direction ? (
+                            <>
+                              {direction === 'asc' ? (
+                                <ArrowUp size={14} />
+                              ) : (
+                                <ArrowDown size={14} />
+                              )}
+                              <span>{directionLabel}</span>
+                            </>
+                          ) : (
+                            <ArrowDownUp size={12} />
+                          )}
+                        </span>
+                      </button>
+                    ) : (
+                      flexRender(h.column.columnDef.header, h.getContext())
+                    )}
+                  </TableHead>
+                );
+              })}
+            </TableRow>
+          ))}
+        </TableHeader>
+        {selectedReference && (
+          <TableBody aria-label="選択中のサンプル（参照）">
+            {renderRow(selectedReference, true)}
           </TableBody>
+        )}
+        <TableBody aria-label="一覧の表示ページ">
+          {table
+            .getRowModel()
+            .rows.filter(
+              (row) => !selectedReference || row.original.index !== selected,
+            )
+            .map((row) => renderRow(row))}
+        </TableBody>
       </Table>
       {samples.length === 0 && (
         <div className="table-empty">条件に一致するサンプルはありません。</div>
