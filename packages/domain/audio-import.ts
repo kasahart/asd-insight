@@ -4,6 +4,7 @@ import { resolveAudio, unusedColumn, type AudioResolution } from './data.ts';
 export type AudioAudit = ReturnType<typeof auditAudioMatches>;
 export const MAX_FOLDER_LEVELS = 64;
 export const AUDIO_PREVIEW_ITEM_LIMIT = 100;
+export const AUDIO_REASON_CANDIDATE_LIMIT = 5;
 
 /** Keep saved mappings bound to actual source columns after folder attributes appear. */
 export function sourceColumnSelection(
@@ -19,6 +20,15 @@ export function previewItems<T>(
   limit = AUDIO_PREVIEW_ITEM_LIMIT,
 ) {
   return items.slice(0, limit);
+}
+
+export function summarizeAudioCandidates(
+  candidates: readonly string[],
+  limit = AUDIO_REASON_CANDIDATE_LIMIT,
+): string {
+  const visible = previewItems(candidates, limit);
+  const omitted = candidates.length - visible.length;
+  return `${visible.join('、')}${omitted ? `、ほか${omitted}件` : ''}`;
 }
 
 /** A read-only preview of the complete prospective attachment set. */
@@ -85,6 +95,7 @@ export function audioListDisplay<T>(
   files: Map<string, T>,
 ) {
   const match = resolveAudio(row, index, idColumn, audioColumn, files);
+  const identifier = idColumn ? String(row[idColumn] ?? '') : '';
 
   // The list describes the source CSV value. WAV matching is a separate
   // concern: a missing or ambiguous attachment must not replace the value the
@@ -92,22 +103,22 @@ export function audioListDisplay<T>(
   if (audioColumn) {
     const sourceValue = String(row[audioColumn] ?? '');
     const normalized = sourceValue.replaceAll('\\', '/');
-    const filename = normalized.split('/').at(-1) || `行${index + 1}`;
+    const filename =
+      normalized.trim() && normalized.split('/').at(-1)
+        ? normalized.split('/').at(-1)!
+        : `行${index + 1}`;
     return {
       filename,
       path: sourceValue,
       status: audioMatchStatus(match, audioColumn, sourceValue),
+      identifier,
     };
-  }
-
-  if (match.key) {
-    const parts = match.key.split('/');
-    return { filename: parts.at(-1) ?? match.key, path: match.key, status: '' };
   }
   return {
     filename: `行${index + 1}`,
     path: '',
     status: audioMatchStatus(match, audioColumn, ''),
+    identifier,
   };
 }
 
@@ -119,8 +130,10 @@ function audioMatchStatus<T>(
   switch (match.reason) {
     case 'matched':
       return '';
-    case 'ambiguous':
-      return `曖昧: 同名WAVが複数あります（候補: ${match.candidates?.join('、') ?? ''}）。CSVに相対パスを指定してください。`;
+    case 'ambiguous': {
+      const candidates = match.candidates ?? [];
+      return `曖昧: 同名WAVが複数あります（候補: ${summarizeAudioCandidates(candidates)}）。CSVに相対パスを指定してください。`;
+    }
     case 'no-files':
       return '未対応: WAVフォルダが未指定です。WAVフォルダを選択してください。';
     case 'audio-column-empty':

@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { FileAudio, Volume2 } from 'lucide-react';
+import { summarizeAudioCandidates } from '@domain/audio-import';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { ScoreValue } from '@/components/score-comparison';
@@ -40,7 +41,7 @@ function audioResolutionMessage(
   if (resolution.reason === 'source-id-empty')
     return 'サンプル名の元IDが空欄で、対応するファイル名を決められません。';
   if (resolution.reason === 'ambiguous')
-    return `同名の音声が複数あります（${resolution.candidates?.join('、')}）。CSVに相対パスを指定してください。`;
+    return `同名の音声が複数あります（${summarizeAudioCandidates(resolution.candidates ?? [])}）。CSVに相対パスを指定してください。`;
   if (resolution.reason === 'name-mismatch') {
     const names = resolution.expectedNames.slice(0, 3).join('、');
     const suffix = resolution.expectedNames.length > 3 ? 'など' : '';
@@ -263,6 +264,7 @@ export function AudioInspector({
         <Volume2 size={15} />
         <h3 id="audio-heading">音声</h3>
       </div>
+      <p className="small-muted audio-sample-label">{label}</p>
       {(!inCurrentList || excluded) && (
         <p className="audio-selection-link">
           {excluded ? '除外中・分布表示なし' : '一覧の絞り込み外'}

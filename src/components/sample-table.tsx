@@ -71,7 +71,12 @@ export function SampleTable({
   idColumn: string;
   audioColumn?: string;
   datasetColumns?: readonly string[];
-  audioDisplay?: readonly { filename: string; path: string; status: string }[];
+  audioDisplay?: readonly {
+    filename: string;
+    path: string;
+    status: string;
+    identifier?: string;
+  }[];
   scoreColumn: string;
   comparisonColumn: string;
   groupColumn: string;
@@ -153,11 +158,17 @@ export function SampleTable({
       {
         id: 'sample',
         accessorFn: (s) =>
-          audioDisplay?.[s.index]?.filename ??
-          (idColumn ? s.row[idColumn] : 'row-' + (s.index + 1)),
+          audioDisplay?.[s.index]?.filename ?? '行' + (s.index + 1),
         header: 'ファイル名',
         cell: (ctx) => {
           const audioAvailable = hasAudio(ctx.row.original);
+          const filename = String(ctx.getValue());
+          const display = audioDisplay?.[ctx.row.original.index];
+          const identifier =
+            !audioColumn || !display?.path.trim()
+              ? (display?.identifier ?? '')
+              : '';
+          const identitySuffix = identifier ? `（ID: ${identifier}）` : '';
           const audioStatus = audioAvailable
             ? ''
             : audioDisplay?.[ctx.row.original.index]?.status ||
@@ -175,8 +186,8 @@ export function SampleTable({
                 onSelect(ctx.row.original);
                 inspect('sample');
               }}
-              title={String(ctx.getValue())}
-              aria-label={String(ctx.getValue()) + ' を選択'}
+              title={filename + identitySuffix}
+              aria-label={filename + identitySuffix + ' を選択'}
             >
               <span
                 className="sample-audio-status"
@@ -192,7 +203,7 @@ export function SampleTable({
                   opacity={audioAvailable ? 1 : 0.25}
                 />
               </span>
-              <span>{abbreviateSampleId(String(ctx.getValue()))}</span>
+              <span>{abbreviateSampleId(filename)}</span>
               {notes[ctx.row.original.index] && <StickyNote size={11} />}
             </button>
           );

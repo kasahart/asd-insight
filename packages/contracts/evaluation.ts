@@ -65,9 +65,8 @@ export type EvaluationListSpec = {
   /** Older bundles omit this field and retain the original partial match. */
   queryMode?: QueryMode;
   idColumn?: string;
-  /** Inspection-only labels derived from matched WAVs, indexed by source row. */
-  sampleLabels?: readonly string[];
-  relativePaths?: readonly string[];
+  /** Source CSV column containing the WAV filename or relative path. */
+  audioColumn?: string;
   decisionFilter?: ReviewFilter;
   overlapOnly?: boolean;
   sort?: EvaluationListSort;

@@ -200,9 +200,8 @@ export function SampleReviewWorkspace({
   query,
   queryMode = 'partial',
   idColumn,
+  audioColumn = '',
   derivedFolderColumns = [],
-  sampleLabels,
-  relativePaths,
   numericColumns,
   selectedIndex,
   labelA = '群A',
@@ -221,9 +220,8 @@ export function SampleReviewWorkspace({
   /** Omitted by old callers/bundles to preserve the original partial match. */
   queryMode?: QueryMode;
   idColumn: string;
+  audioColumn?: string;
   derivedFolderColumns?: readonly string[];
-  sampleLabels?: readonly string[];
-  relativePaths?: readonly string[];
   numericColumns?: readonly string[];
   selectedIndex: number | null;
   labelA?: string;
@@ -380,8 +378,7 @@ export function SampleReviewWorkspace({
         query,
         queryMode,
         idColumn,
-        sampleLabels,
-        relativePaths,
+        audioColumn,
         decisionFilter: filter,
         sort: mapped,
       },
@@ -404,8 +401,7 @@ export function SampleReviewWorkspace({
     query,
     queryMode,
     idColumn,
-    sampleLabels,
-    relativePaths,
+    audioColumn,
     numericColumns,
     filter,
     sorting,

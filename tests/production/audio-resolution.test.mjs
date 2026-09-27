@@ -7,12 +7,14 @@ import {
 } from '../../packages/domain/data.ts';
 import {
   AUDIO_PREVIEW_ITEM_LIMIT,
+  AUDIO_REASON_CANDIDATE_LIMIT,
   MAX_FOLDER_LEVELS,
   audioListDisplay,
   auditAudioMatches,
   folderAttributeCandidates,
   previewItems,
   sourceColumnSelection,
+  summarizeAudioCandidates,
   withFolderAttributes,
 } from '../../packages/domain/audio-import.ts';
 import { addAudioAttachments } from '../../src/lib/audio-attachments.ts';
@@ -283,7 +285,37 @@ test('folder keys distinguish equal names, and basename-only references require 
       '',
       new Map([['正常/設備A/001.wav', normal]]),
     ),
-    { filename: '001.wav', path: '正常/設備A/001.wav', status: '' },
+    {
+      filename: '行1',
+      path: '',
+      status: '',
+      identifier: '001',
+    },
+  );
+  assert.deepEqual(
+    audioListDisplay({ id: 'sample-02' }, 1, 'id', '', new Map()),
+    {
+      filename: '行2',
+      path: '',
+      status:
+        '未対応: WAVフォルダが未指定です。WAVフォルダを選択してください。',
+      identifier: 'sample-02',
+    },
+  );
+  assert.deepEqual(
+    audioListDisplay(
+      { id: 'SERIAL-C-003', audio_file: '  ' },
+      2,
+      'id',
+      'audio_file',
+      files,
+    ),
+    {
+      filename: '行3',
+      path: '  ',
+      status: '未対応: 音声列「audio_file」が空欄です。',
+      identifier: 'SERIAL-C-003',
+    },
   );
   assert.deepEqual(
     audioListDisplay(
@@ -297,6 +329,7 @@ test('folder keys distinguish equal names, and basename-only references require 
       filename: '001.wav',
       path: '正常/設備A/001.wav',
       status: '',
+      identifier: '',
     },
   );
   const ambiguousDisplay = audioListDisplay(
@@ -311,6 +344,7 @@ test('folder keys distinguish equal names, and basename-only references require 
     path: '001.wav',
     status:
       '曖昧: 同名WAVが複数あります（候補: 正常/設備A/001.wav、要確認/設備B/001.wav）。CSVに相対パスを指定してください。',
+    identifier: '',
   });
   const missingDisplay = audioListDisplay(
     { audio_file: 'missing.wav' },
@@ -336,6 +370,29 @@ test('folder keys distinguish equal names, and basename-only references require 
     audioListDisplay({ audio_file: '' }, 1, '', 'audio_file', files).status,
     /音声列「audio_file」が空欄/,
   );
+});
+
+test('ambiguous audio reasons show a bounded candidate sample and total', () => {
+  const count = AUDIO_REASON_CANDIDATE_LIMIT + 17;
+  const candidates = Array.from(
+    { length: count },
+    (_, index) => `folder-${index}/shared.wav`,
+  );
+  const summary = summarizeAudioCandidates(candidates);
+  assert.ok(summary.includes(candidates[0]));
+  assert.ok(summary.includes(candidates[AUDIO_REASON_CANDIDATE_LIMIT - 1]));
+  assert.ok(summary.includes(`ほか17件`));
+  assert.ok(!summary.includes(candidates.at(-1)));
+
+  const display = audioListDisplay(
+    { audio_file: 'shared.wav' },
+    0,
+    '',
+    'audio_file',
+    new Map(candidates.map((key) => [key, file('shared.wav')])),
+  );
+  assert.match(display.status, /ほか17件/);
+  assert.ok(!display.status.includes(candidates.at(-1)));
 });
 
 test('basename indexing keeps a large same-name candidate set intact', () => {

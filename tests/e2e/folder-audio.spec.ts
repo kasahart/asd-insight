@@ -153,3 +153,55 @@ test('階層WAVの自動属性化と一覧での対応状況', async ({ page }) 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('音声対応数が保存上限を超えたフォルダは確認画面へ進めない', async ({
+  page,
+}) => {
+  const root = await mkdtemp(join(tmpdir(), 'asd-insight-audio-limit-'));
+  try {
+    for (let index = 0; index < 2001; index++) {
+      const name = `sample-${String(index).padStart(4, '0')}.wav`;
+      await writeFile(join(root, name), Buffer.from('RIFF0000WAVE'));
+    }
+    await page.goto('/');
+    const openData = page.getByRole('button', {
+      name: 'データを選ぶ',
+      exact: true,
+    });
+    try {
+      await expect(openData).toBeVisible({ timeout: 15_000 });
+    } catch {
+      await page.getByRole('button', { name: '保存せず一時利用' }).click();
+      await expect(openData).toBeVisible();
+    }
+    await openData.click();
+    const dialog = page.getByRole('dialog', { name: 'データと保存した分析' });
+    await dialog
+      .locator('input[type="file"][accept=".csv,.tsv"]')
+      .setInputFiles({
+        name: 'audio-limit.csv',
+        mimeType: 'text/csv',
+        buffer: Buffer.from(
+          'sample_id,score,group,audio_file\n001,0.1,A,sample-0000.wav\n002,0.9,B,sample-0001.wav\n',
+        ),
+      });
+    await dialog.getByRole('button', { name: 'このデータを表示' }).click();
+    await page.locator('#dataset-mapping-summary').click();
+    await page.locator('#group-column').selectOption('group');
+    await page.locator('#group-a').selectOption('A');
+    await page.locator('#group-b').selectOption('B');
+    await page.locator('#audio-column').selectOption('audio_file');
+    await page.locator('input[webkitdirectory]').setInputFiles(root);
+    await expect(page.locator('.import-error')).toContainText(
+      'WAVは2,000件まで追加できます',
+    );
+    await expect(
+      page.getByRole('region', { name: '音声の取り込み前確認' }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: '確認して追加' }),
+    ).toHaveCount(0);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

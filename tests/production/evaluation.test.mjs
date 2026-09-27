@@ -91,6 +91,83 @@ test('128 source columns plus folder attributes can be profiled and evaluated', 
   assert.equal(evaluated.result.distribution.nB, 1);
 });
 
+test('listing derives filename/path from the source column and still searches source IDs', () => {
+  const dataset = {
+    name: 'audio-values.csv',
+    demo: false,
+    columns: ['score', 'label', 'sample_id', 'audio_file'],
+    rows: [
+      {
+        score: '0.1',
+        label: 'OK',
+        sample_id: 'SERIAL-A-001',
+        audio_file: 'normal/device-a/001.wav',
+      },
+      {
+        score: '0.9',
+        label: 'NG',
+        sample_id: 'SERIAL-B-002',
+        audio_file: 'review/device-b/002.wav',
+      },
+      {
+        score: '0.8',
+        label: 'NG',
+        sample_id: 'SERIAL-C-003',
+        audio_file: '  ',
+      },
+    ],
+  };
+  const byFilename = evaluateDataset(dataset, {
+    ...spec,
+    list: {
+      audioColumn: 'audio_file',
+      idColumn: 'sample_id',
+      query: '002.wav',
+    },
+  });
+  assert.deepEqual(byFilename.listing.listedIndices, [1]);
+  const byPath = evaluateDataset(dataset, {
+    ...spec,
+    list: {
+      audioColumn: 'audio_file',
+      idColumn: 'sample_id',
+      query: 'review/device-b/002.wav',
+      queryMode: 'exact',
+    },
+  });
+  assert.deepEqual(byPath.listing.listedIndices, [1]);
+  const noAudioColumn = evaluateDataset(dataset, {
+    ...spec,
+    list: {
+      idColumn: 'sample_id',
+      query: 'serial-a-001',
+      sort: { column: '__sample', desc: false },
+    },
+  });
+  assert.deepEqual(noAudioColumn.listing.listedIndices, [0]);
+  const idNotSearchedWhenAudioColumnIsSelected = evaluateDataset(dataset, {
+    ...spec,
+    list: {
+      audioColumn: 'audio_file',
+      idColumn: 'sample_id',
+      query: 'serial-a-001',
+    },
+  });
+  assert.deepEqual(
+    idNotSearchedWhenAudioColumnIsSelected.listing.listedIndices,
+    [],
+  );
+  const blankAudioValueFallsBackToId = evaluateDataset(dataset, {
+    ...spec,
+    list: {
+      audioColumn: 'audio_file',
+      idColumn: 'sample_id',
+      query: 'serial-c-003',
+    },
+  });
+  assert.deepEqual(blankAudioValueFallsBackToId.listing.listedIndices, [2]);
+});
+
 test('automatic and explicit extents reject collapsed floating-point bins instead of hiding a cohort', () => {
   for (const [lo, hi] of [
     [1, 1 + Number.EPSILON],
@@ -424,6 +501,7 @@ test('worker listing sorts match the existing table for score, group, sample, te
         ignoredIndices: [0, 5],
         list: {
           idColumn: 'name',
+          audioColumn: 'name',
           sort: { column: definition.column, kind: definition.kind, desc },
         },
       });
@@ -463,7 +541,10 @@ test('listing sort keeps ties stable, missing numeric values last, fallback name
   dataset.rows.forEach((row, i) => (row.__score = String(12 - i)));
   const named = evaluateDataset(dataset, {
     ...spec,
-    list: { sort: { column: '__sample', desc: false } },
+    list: {
+      audioColumn: 'name',
+      sort: { column: '__sample', desc: false },
+    },
   });
   assert.deepEqual(
     named.listing.listedIndices,

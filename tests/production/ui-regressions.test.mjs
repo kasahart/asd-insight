@@ -275,6 +275,12 @@ function TableScenario({ options }) {
   );
   return h(SampleTable, {
     idColumn: 'filename',
+    audioColumn: 'filename',
+    audioDisplay: options.samples.map(({ index, row }) => ({
+      filename: row.filename,
+      path: row.filename,
+      status: '',
+    })),
     scoreColumn: 'score',
     groupColumn: 'label',
     comparisonColumn: '',
@@ -317,11 +323,11 @@ async function tableFixture(options = {}, initial = {}) {
 
 test('manual pagination shares pinned columns, renders at most eight page rows and keeps accurate counts', async () => {
   const app = await tableFixture({ comparisonColumn: 'auxiliary' });
-  assert.equal(reference(app.tree).findAllByType('td').length, 6);
+  assert.equal(reference(app.tree).findAllByType('td').length, 7);
   assert.equal(listed(app.tree).findAllByType('tr').length, 8);
   assert.match(
     text(reference(app.tree)),
-    /選択中sample-10.wav群A0.111.5normal対象/,
+    /選択中sample-10\.wavsample-10\.wav群A11\.50\.1normal対象/,
   );
   assert.match(text(footer(app.tree)), /18件中 1–8件.*1 \/ 3/);
   await click(button(app.tree, '次のページ'));
@@ -338,6 +344,41 @@ test('manual pagination shares pinned columns, renders at most eight page rows a
   assert.deepEqual(names(app.tree), ['sample-16.wav', 'sample-17.wav']);
   assert.match(text(footer(app.tree)), /18件中 17–18件.*3 \/ 3/);
   assert.equal(button(app.tree, '次のページ').props.disabled, true);
+});
+
+test('blank source audio values keep the row action and identify the sample by its source ID', async () => {
+  const row = {
+    index: 0,
+    score: 0.1,
+    group: 'A',
+    row: { filename: '', score: '0.1', auxiliary: '1.5', label: 'normal' },
+  };
+  const reason = '未対応: 音声列「filename」が空欄です。';
+  const app = await tableFixture({
+    samples: [row],
+    selectedSample: null,
+    hasAudio: () => false,
+    audioDisplay: [
+      {
+        filename: '行1',
+        path: '',
+        status: reason,
+        identifier: 'SERIAL-C-003',
+      },
+    ],
+  });
+  const link = listed(app.tree).findByProps({ className: 'sample-link' });
+  assert.equal(text(link), '行1');
+  assert.equal(link.props.title, '行1（ID: SERIAL-C-003）');
+  assert.equal(link.props['aria-label'], '行1（ID: SERIAL-C-003） を選択');
+  const audioStatus = app.tree.root.findByProps({
+    className: 'sample-audio-status',
+  });
+  assert.equal(audioStatus.props.title, reason);
+  assert.equal(
+    audioStatus.findByProps({ className: 'sample-audio-icon' }).props.opacity,
+    0.25,
+  );
 });
 
 test('native full-cell sort controls alternate two states, reset pages and persist ordering on reopen', async () => {

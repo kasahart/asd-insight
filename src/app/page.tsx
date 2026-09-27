@@ -27,6 +27,7 @@ import {
 import { ContextWorkbench } from '@/components/context-workbench';
 import { EvaluationSettings } from '@/components/evaluation-settings';
 import { addAudioAttachments } from '@/lib/audio-attachments';
+import { LIMITS } from '@storage/validation';
 import {
   MAX_FOLDER_LEVELS,
   auditAudioMatches,
@@ -675,14 +676,6 @@ function DiagnosticsWorkspace() {
       }),
     [sourceData, idColumn, audioDisplayColumn, audioFiles],
   );
-  const sampleLabels = useMemo(
-    () => audioDisplay.map(({ filename }) => filename),
-    [audioDisplay],
-  );
-  const relativePaths = useMemo(
-    () => audioDisplay.map(({ path }) => path),
-    [audioDisplay],
-  );
   const [profiles, setProfiles] = useState<Profile[]>([]);
   useEffect(() => {
     const client = new EvaluationWorkerClient();
@@ -749,8 +742,13 @@ function DiagnosticsWorkspace() {
   );
   const labelA = group.kind === 'category' ? group.a : '≤ ' + numericA,
     labelB = group.kind === 'category' ? group.b : '≥ ' + numericB;
-  const sampleLabel = (s: Sample) =>
-    audioDisplay[s.index]?.filename ?? `行${s.index + 1}`;
+  const sampleLabel = (s: Sample) => {
+    const display = audioDisplay[s.index];
+    const filename = display?.filename ?? `行${s.index + 1}`;
+    return (!audioColumn || !display?.path.trim()) && display?.identifier
+      ? `${filename}（ID: ${display.identifier}）`
+      : filename;
+  };
   const selectSample = useCallback(
     (s: Sample) => setSelected(s.index),
     [setSelected],
@@ -817,19 +815,35 @@ function DiagnosticsWorkspace() {
       });
       return;
     }
-    const incoming = Array.from(files).filter((file) =>
-      /\.wav$/i.test(file.name),
-    );
+    const incoming: File[] = [];
+    const map = new Map(audioFiles);
+    if (map.size > LIMITS.assetCount) {
+      setMessage({
+        error: true,
+        text: `WAVは${LIMITS.assetCount.toLocaleString()}件まで追加できます。現在の対応数が上限を超えています。`,
+      });
+      return;
+    }
+    const duplicates: string[] = [];
+    for (const file of files) {
+      if (!/\.wav$/i.test(file.name)) continue;
+      incoming.push(file);
+      const key = audioFileKey(file);
+      if (map.has(key)) duplicates.push(key);
+      else {
+        map.set(key, file);
+        if (map.size > LIMITS.assetCount) {
+          setMessage({
+            error: true,
+            text: `WAVは${LIMITS.assetCount.toLocaleString()}件まで追加できます。重複を除いた追加後の件数は${map.size.toLocaleString()}件です。`,
+          });
+          return;
+        }
+      }
+    }
     if (!incoming.length) {
       setMessage({ error: true, text: '選択したフォルダにWAVがありません。' });
       return;
-    }
-    const map = new Map(audioFiles);
-    const duplicates: string[] = [];
-    for (const file of incoming) {
-      const key = audioFileKey(file);
-      if (map.has(key)) duplicates.push(key);
-      else map.set(key, file);
     }
     const candidateLevels = folderAttributeCandidates(map);
     if (candidateLevels.length > MAX_FOLDER_LEVELS) {
@@ -1036,9 +1050,8 @@ function DiagnosticsWorkspace() {
           query={query}
           queryMode={queryMode}
           idColumn={idColumn}
+          audioColumn={audioDisplayColumn}
           derivedFolderColumns={folderColumnNames}
-          sampleLabels={sampleLabels}
-          relativePaths={relativePaths}
           numericColumns={numericColumns}
           selectedIndex={selected}
           labelA={labelA}
