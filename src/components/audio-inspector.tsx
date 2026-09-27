@@ -39,6 +39,8 @@ function audioResolutionMessage(
     return `音声列「${resolution.sourceColumn}」のこの行は空欄です。`;
   if (resolution.reason === 'source-id-empty')
     return 'サンプル名の元IDが空欄で、対応するファイル名を決められません。';
+  if (resolution.reason === 'ambiguous')
+    return `同名の音声が複数あります（${resolution.candidates?.join('、')}）。CSVに相対パスを指定してください。`;
   if (resolution.reason === 'name-mismatch') {
     const names = resolution.expectedNames.slice(0, 3).join('、');
     const suffix = resolution.expectedNames.length > 3 ? 'など' : '';

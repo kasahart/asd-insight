@@ -5,6 +5,7 @@ import type {
   SaveSessionInput,
   SessionRecord,
 } from '../../packages/contracts/storage.ts';
+import { folderAttributeColumn } from '../../packages/domain/audio-import.ts';
 
 export type SaveStatus = 'saved' | 'unsaved' | 'saving' | 'error';
 export type WorkspaceSnapshot = {
@@ -682,14 +683,31 @@ export function validateApplicationState(
     'filterDecision',
     'audioAnalyses',
     'inspectorSelection',
+    'adoptedFolderLevels',
   ];
   keys(state, allowed, '未対応の項目', ['schemaVersion']);
   if (state.schemaVersion !== 1) invalid('schemaVersion');
   if (state.rowCount !== undefined && state.rowCount !== rows)
     invalid('rowCount');
+  const adopted = state.adoptedFolderLevels ?? [];
+  if (
+    !Array.isArray(adopted) ||
+    adopted.length > 64 ||
+    adopted.some(
+      (level) => !Number.isInteger(level) || level < 1 || level > 64,
+    ) ||
+    new Set(adopted).size !== adopted.length
+  )
+    invalid('adoptedFolderLevels');
+  const validColumns = columns && [
+    ...columns,
+    ...adopted.map((level: number) =>
+      folderAttributeColumn({ columns }, level),
+    ),
+  ];
   const column = (value: unknown, field: string) => {
     text(value, field, 4096);
-    if (value && columns && !columns.includes(value)) invalid(field);
+    if (value && validColumns && !validColumns.includes(value)) invalid(field);
   };
   for (const key of strings)
     if (Object.hasOwn(state, key)) text(state[key], key);

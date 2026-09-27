@@ -104,9 +104,11 @@ test('分析の来歴とJSON/CSV/.ovlabの実ファイルを照合し、再取�
   const audioFiles = [1, 2, 3, 4].map((index) =>
     wavFile(`sample-00${index}.wav`, 220 + index * 30),
   );
+  await page.locator('#dataset-mapping-summary').click();
   await page
     .locator('input[type="file"][accept="audio/wav,.wav"]')
     .setInputFiles(audioFiles);
+  await page.getByRole('button', { name: '確認して追加' }).click();
   await expect(page.locator('.audio-import-control')).toContainText('4 / 4件');
 
   const firstSample = page.getByRole('button', {

@@ -29,6 +29,12 @@ import { ContextWorkbench } from '@/components/context-workbench';
 import { EvaluationSettings } from '@/components/evaluation-settings';
 import { addAudioAttachments } from '@/lib/audio-attachments';
 import {
+  auditAudioMatches,
+  folderAttributeCandidates,
+  folderAttributeColumn,
+  withFolderAttributes,
+} from '@domain/audio-import';
+import {
   type ThresholdReport,
   type PrecisionRecallEvaluation,
 } from '@/components/threshold-context';
@@ -59,6 +65,7 @@ import {
 import type { Dataset } from '@/lib/demo';
 import {
   csvText,
+  audioFileKey,
   defaultGroup,
   findAudio,
   resolveAudio,
@@ -90,6 +97,7 @@ type AnalysisReportInput = {
   bins: number;
   idColumn: string;
   audioColumn: string;
+  adoptedFolderLevels: readonly number[];
   range: ScoreRange | null;
   overlapOnly: boolean;
   query: string;
@@ -118,6 +126,7 @@ export function buildAnalysisReport(input: AnalysisReportInput) {
     bins,
     idColumn,
     audioColumn,
+    adoptedFolderLevels,
     range,
     overlapOnly,
     query,
@@ -167,6 +176,7 @@ export function buildAnalysisReport(input: AnalysisReportInput) {
       bins,
       idColumn,
       audioColumn,
+      adoptedFolderLevels,
     },
     method: {
       name: 'Area under the precision-recall curve (trapezoidal)',
@@ -476,7 +486,7 @@ export default function Home() {
 
 function DiagnosticsWorkspace() {
   const { active, controller, policy, operation } = useWorkspace();
-  const data = active!.dataset;
+  const sourceData = active!.dataset;
   const datasetSession = active!.record.id;
   const [score, setScore] = useSessionState('score', '');
   const [group, setGroup] = useSessionState<GroupSpec>('group', {
@@ -487,6 +497,9 @@ function DiagnosticsWorkspace() {
   });
   const [idColumn, setIdColumn] = useSessionState('idColumn', '');
   const [audioColumn, setAudioColumn] = useSessionState('audioColumn', '');
+  const [adoptedFolderLevels, setAdoptedFolderLevels] = useSessionState<
+    number[]
+  >('adoptedFolderLevels', []);
   const [numericA, setNumericA] = useSessionState('numericA', '');
   const [numericB, setNumericB] = useSessionState('numericB', '');
   const [filterColumn, setFilterColumn] = useSessionState('filterColumn', '');
@@ -511,6 +524,17 @@ function DiagnosticsWorkspace() {
     {},
   );
   const audioFiles = active!.audioFiles;
+  const data = useMemo(
+    () =>
+      withFolderAttributes(
+        sourceData,
+        idColumn,
+        audioColumn,
+        audioFiles,
+        adoptedFolderLevels,
+      ),
+    [sourceData, idColumn, audioColumn, audioFiles, adoptedFolderLevels],
+  );
   const setAudioFiles = (files: Map<string, File>) =>
     controller.updateAudio(files);
   const [message, setMessage] = useState<{
@@ -518,6 +542,29 @@ function DiagnosticsWorkspace() {
     text: string;
   } | null>(null);
   const audioInput = useRef<HTMLInputElement>(null);
+  const folderInput = useRef<HTMLInputElement>(null);
+  const [pendingAudio, setPendingAudio] = useState<{
+    incoming: File[];
+    files: Map<string, File>;
+    duplicates: string[];
+    changed: number[];
+    adopted: number[];
+  } | null>(null);
+  const previewAudit = useMemo(
+    () =>
+      pendingAudio
+        ? auditAudioMatches(
+            sourceData,
+            idColumn,
+            audioColumn,
+            pendingAudio.files,
+          )
+        : null,
+    [pendingAudio, sourceData, idColumn, audioColumn],
+  );
+  const folderCandidates = folderAttributeCandidates(
+    pendingAudio?.files ?? audioFiles,
+  );
   const [profiles, setProfiles] = useState<Profile[]>([]);
   useEffect(() => {
     const client = new EvaluationWorkerClient();
@@ -627,11 +674,43 @@ function DiagnosticsWorkspace() {
       else setGroup({ kind: 'category', column: '', a: '', b: '' });
     }
   }
-  function attachAudio(files: FileList) {
+  function previewAudio(files: FileList, folder: boolean) {
+    const incoming = Array.from(files).filter(
+      (file) => !folder || /\.wav$/i.test(file.name),
+    );
+    if (!incoming.length) {
+      setMessage({ error: true, text: '選択したフォルダにWAVがありません。' });
+      return;
+    }
+    const map = new Map(audioFiles);
+    const duplicates: string[] = [];
+    for (const file of incoming) {
+      const key = audioFileKey(file);
+      if (map.has(key)) duplicates.push(key);
+      else map.set(key, file);
+    }
+    const changed = sourceData.rows.flatMap((row, index) => {
+      const previous = findAudio(row, index, idColumn, audioColumn, audioFiles);
+      return previous &&
+        findAudio(row, index, idColumn, audioColumn, map) !== previous
+        ? [index + 1]
+        : [];
+    });
+    setPendingAudio({
+      incoming,
+      files: map,
+      duplicates,
+      changed,
+      adopted: adoptedFolderLevels,
+    });
+    setMessage(null);
+  }
+  function attachAudio() {
+    if (!pendingAudio) return;
     let map: Map<string, File>;
     try {
-      map = addAudioAttachments(audioFiles, Array.from(files), {
-        rows: data.rows,
+      map = addAudioAttachments(audioFiles, pendingAudio.incoming, {
+        rows: sourceData.rows,
         resolve: (row, index, files) =>
           findAudio(row, index, idColumn, audioColumn, files),
       });
@@ -646,9 +725,25 @@ function DiagnosticsWorkspace() {
       return;
     }
     setAudioFiles(map);
-    const matched = data.rows.filter(
-      (row, index) => !!findAudio(row, index, idColumn, audioColumn, map),
-    ).length;
+    for (const level of adoptedFolderLevels.filter(
+      (level) => !pendingAudio.adopted.includes(level),
+    )) {
+      const column = folderAttributeColumn(sourceData, level);
+      if (group.column === column)
+        setGroup({ kind: 'category', column: '', a: '', b: '' });
+      if (filterColumn === column) {
+        setFilterColumn('');
+        setFilterValue('');
+      }
+    }
+    setAdoptedFolderLevels(pendingAudio.adopted);
+    setPendingAudio(null);
+    const matched = auditAudioMatches(
+      sourceData,
+      idColumn,
+      audioColumn,
+      map,
+    ).matched;
     setMessage({
       error: false,
       text:
@@ -715,6 +810,7 @@ function DiagnosticsWorkspace() {
       bins,
       idColumn,
       audioColumn,
+      adoptedFolderLevels,
       range,
       overlapOnly,
       query,
@@ -751,7 +847,20 @@ function DiagnosticsWorkspace() {
         multiple
         hidden
         onChange={(e) => {
-          if (e.target.files) attachAudio(e.target.files);
+          if (e.target.files) previewAudio(e.target.files, false);
+          e.target.value = '';
+        }}
+      />
+      <input
+        ref={(node) => {
+          folderInput.current = node;
+          node?.setAttribute('webkitdirectory', '');
+        }}
+        type="file"
+        multiple
+        hidden
+        onChange={(e) => {
+          if (e.target.files) previewAudio(e.target.files, true);
           e.target.value = '';
         }}
       />
@@ -1062,15 +1171,170 @@ function DiagnosticsWorkspace() {
                           : `原音対応 ${audioMatchCount.toLocaleString()} / ${data.rows.length.toLocaleString()}件`}
                       </p>
                       {!data.demo && (
-                        <Button
-                          variant="outline"
-                          onClick={() => audioInput.current?.click()}
-                        >
-                          <FileAudio size={14} />
-                          試聴用の音声を追加
-                        </Button>
+                        <>
+                          <Button
+                            variant="outline"
+                            onClick={() => audioInput.current?.click()}
+                          >
+                            <FileAudio size={14} />
+                            試聴用の音声を追加
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => folderInput.current?.click()}
+                          >
+                            WAVフォルダを選択
+                          </Button>
+                        </>
                       )}
                     </div>
+                    {pendingAudio && previewAudit && (
+                      <section
+                        className="audio-import-preview"
+                        aria-label="音声の取り込み前確認"
+                      >
+                        <h3>取り込み前の確認</h3>
+                        <p>
+                          {pendingAudio.incoming.length}件のWAVを選択。対応{' '}
+                          {previewAudit.matched}行、未対応{' '}
+                          {previewAudit.missing.length}行、曖昧{' '}
+                          {previewAudit.ambiguous.length}行、未参照{' '}
+                          {previewAudit.unused.length}件、重複参照{' '}
+                          {previewAudit.repeated.length}件、相対パス重複{' '}
+                          {pendingAudio.duplicates.length}件。
+                        </p>
+                        {(
+                          [
+                            [
+                              '未対応のCSV行',
+                              previewAudit.missing.map(
+                                (item) =>
+                                  `${item.row}行目: ${item.expected || '空欄'}`,
+                              ),
+                            ],
+                            [
+                              '曖昧なCSV行',
+                              previewAudit.ambiguous.map(
+                                (item) =>
+                                  `${item.row}行目: ${item.candidates.join('、')}`,
+                              ),
+                            ],
+                            ['参照されないWAV', previewAudit.unused],
+                            [
+                              '複数行から参照されるWAV',
+                              previewAudit.repeated.map(
+                                (item) =>
+                                  `${item.key}: ${item.rows.join('、')}行目`,
+                              ),
+                            ],
+                            ['重複する相対パス', pendingAudio.duplicates],
+                            [
+                              '既存の対応が変わる行',
+                              pendingAudio.changed.map((row) => `${row}行目`),
+                            ],
+                          ] as [string, string[]][]
+                        )
+                          .filter(([, values]) => values.length)
+                          .map(([title, values]) => (
+                            <details key={title}>
+                              <summary>
+                                {title}（{values.length}）
+                              </summary>
+                              <ul>
+                                {values.map((value, index) => (
+                                  <li key={`${index}-${value}`}>{value}</li>
+                                ))}
+                              </ul>
+                            </details>
+                          ))}
+                        <div className="audio-import-actions">
+                          <Button
+                            onClick={attachAudio}
+                            disabled={
+                              !!(
+                                pendingAudio.duplicates.length ||
+                                pendingAudio.changed.length
+                              )
+                            }
+                          >
+                            確認して追加
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => setPendingAudio(null)}
+                          >
+                            取り消す
+                          </Button>
+                        </div>
+                      </section>
+                    )}
+                    {!!folderCandidates.length && (
+                      <section
+                        className="folder-attributes"
+                        aria-label="WAVフォルダの属性候補"
+                      >
+                        <h3>フォルダ階層の属性候補</h3>
+                        <p>
+                          フォルダ名は自動で群ラベルにしません。採用した階層だけを群分け・絞り込みの列として使えます。
+                        </p>
+                        {folderCandidates.map(({ level, values }) => {
+                          const adopted =
+                            pendingAudio?.adopted ?? adoptedFolderLevels;
+                          return (
+                            <div key={level} className="folder-attribute-row">
+                              <label>
+                                <input
+                                  type="checkbox"
+                                  checked={adopted.includes(level)}
+                                  onChange={(event) => {
+                                    const next = event.target.checked
+                                      ? [...adopted, level].sort(
+                                          (a, b) => a - b,
+                                        )
+                                      : adopted.filter(
+                                          (value) => value !== level,
+                                        );
+                                    if (pendingAudio)
+                                      setPendingAudio({
+                                        ...pendingAudio,
+                                        adopted: next,
+                                      });
+                                    else {
+                                      setAdoptedFolderLevels(next);
+                                      if (!event.target.checked) {
+                                        const column = folderAttributeColumn(
+                                          sourceData,
+                                          level,
+                                        );
+                                        if (group.column === column)
+                                          setGroup({
+                                            kind: 'category',
+                                            column: '',
+                                            a: '',
+                                            b: '',
+                                          });
+                                        if (filterColumn === column) {
+                                          setFilterColumn('');
+                                          setFilterValue('');
+                                        }
+                                      }
+                                    }
+                                  }}
+                                />
+                                階層{level}を分析条件に採用
+                              </label>
+                              <small>
+                                {values
+                                  .map(
+                                    ([value, count]) => `${value} (${count})`,
+                                  )
+                                  .join('、')}
+                              </small>
+                            </div>
+                          );
+                        })}
+                      </section>
+                    )}
                     <p>
                       試聴・スペクトログラム用です。音声なしでも分布を比較できます。
                     </p>
@@ -1146,6 +1410,7 @@ function DiagnosticsWorkspace() {
                                   bins,
                                   idColumn,
                                   audioColumn,
+                                  adoptedFolderLevels,
                                   range,
                                   overlapOnly,
                                   query,
@@ -1708,6 +1973,11 @@ function DiagnosticsWorkspace() {
                                   demo={data.demo}
                                   file={selectedAudioFile}
                                   audioResolution={selectedAudioResolution}
+                                  sourceDescription={
+                                    selectedAudioResolution?.key
+                                      ? `対応WAV: ${selectedAudioResolution.key}`
+                                      : undefined
+                                  }
                                   onOpenAudioSettings={openAudioSettings}
                                   onAnalysis={(metadata) => {
                                     const sessionId = datasetSession;

@@ -142,6 +142,23 @@ function completeState() {
 }
 const columns = ['sample_id', 'score', 'score2', 'group'];
 
+test('folder attributes must be explicitly adopted before saved conditions may use them', () => {
+  const value = state();
+  value.rowCount = 2;
+  value.group = {
+    kind: 'category',
+    column: 'WAVフォルダ階層1',
+    a: '正常',
+    b: '要確認',
+  };
+  assert.throws(() => validateApplicationState(value, 2, columns));
+  value.adoptedFolderLevels = [1];
+  value.filterColumn = 'WAVフォルダ階層1';
+  validateApplicationState(value, 2, columns);
+  value.adoptedFolderLevels = [1, 1];
+  assert.throws(() => validateApplicationState(value, 2, columns));
+});
+
 test('complete schema accepts deliberate string drafts, retained zero-width score selections and null defaults', () => {
   const value = completeState();
   validateApplicationState(value, 2, columns);

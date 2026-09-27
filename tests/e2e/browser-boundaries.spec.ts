@@ -502,7 +502,14 @@ test('manual step anchors and same-origin image/link resources are usable', asyn
   await page.goto('/manual/');
   await expect(page).toHaveTitle('ASD Insight | 使い方');
 
-  const stepIds = ['start', 'conditions', 'distribution', 'samples', 'save'];
+  const stepIds = [
+    'start',
+    'conditions',
+    'distribution',
+    'samples',
+    'save',
+    'video',
+  ];
   const stepLinks = page
     .getByRole('navigation', { name: '手順' })
     .getByRole('link');

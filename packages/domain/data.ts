@@ -339,6 +339,7 @@ export function unusedColumn(base: string, existing: string[]) {
 }
 export type AudioResolutionReason =
   | 'matched'
+  | 'ambiguous'
   | 'no-files'
   | 'audio-column-empty'
   | 'source-id-empty'
@@ -347,9 +348,37 @@ export type AudioResolution<T> = {
   file: T | undefined;
   reason: AudioResolutionReason;
   expectedNames: readonly string[];
+  candidates?: readonly string[];
+  key?: string;
   source: 'audio-column' | 'sample-id';
   sourceColumn?: string;
 };
+/** Browsers expose folder paths with a selected-root prefix. Keys never contain it. */
+export function audioFileKey(file: {
+  name: string;
+  webkitRelativePath?: string;
+}): string {
+  const parts = (file.webkitRelativePath || '')
+    .replaceAll('\\', '/')
+    .split('/');
+  return parts.length > 1 ? parts.slice(1).join('/') : file.name;
+}
+export function normalizedAudioPath(value: string): string {
+  return value.trim().replaceAll('\\', '/').replace(/^\.\//, '');
+}
+const audioIndexes = new WeakMap<object, Map<string, string[]>>();
+function audioBasenames<T>(files: Map<string, T>): Map<string, string[]> {
+  let index = audioIndexes.get(files);
+  if (!index) {
+    index = new Map();
+    for (const key of files.keys()) {
+      const name = key.split('/').at(-1) ?? key;
+      index.set(name, [...(index.get(name) ?? []), key]);
+    }
+    audioIndexes.set(files, index);
+  }
+  return index;
+}
 export function resolveAudio<T>(
   row: DataRow,
   index: number,
@@ -366,7 +395,7 @@ export function resolveAudio<T>(
       ? (row[idColumn] ?? '')
       : 'row-' + (index + 1);
   const expectedNames = audioColumn
-    ? [rawName.split(/[\\/]/).pop() ?? '']
+    ? [normalizedAudioPath(rawName)]
     : [
         id,
         ...['.wav', '.flac', '.mp3', '.ogg', '.m4a'].map(
@@ -378,13 +407,24 @@ export function resolveAudio<T>(
     source,
     sourceColumn,
   } as const;
-  if (!files.size) return { ...base, file: undefined, reason: 'no-files' };
-  for (const name of expectedNames) {
-    const file = files.get(name);
-    if (file) return { ...base, file, reason: 'matched' };
-  }
   if (audioColumn && !expectedNames[0])
     return { ...base, file: undefined, reason: 'audio-column-empty' };
+  if (!files.size) return { ...base, file: undefined, reason: 'no-files' };
+  for (const name of expectedNames) {
+    if (name.includes('/')) {
+      // A path is explicit. Never guess from its basename when it is missing.
+      const file = files.get(name);
+      if (file) return { ...base, file, key: name, reason: 'matched' };
+      continue;
+    }
+    const candidates = audioBasenames(files).get(name) ?? [];
+    if (candidates.length === 1) {
+      const key = candidates[0];
+      return { ...base, file: files.get(key), key, reason: 'matched' };
+    }
+    if (candidates.length > 1)
+      return { ...base, file: undefined, candidates, reason: 'ambiguous' };
+  }
   if (!audioColumn && !id)
     return { ...base, file: undefined, reason: 'source-id-empty' };
   return { ...base, file: undefined, reason: 'name-mismatch' };
