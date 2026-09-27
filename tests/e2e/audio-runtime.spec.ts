@@ -127,7 +127,7 @@ test('合成デモの音声を実Wandas/Pyodideで解析し、音声表示とゲ
     .locator('tbody[aria-label="一覧の表示ページ"] button.sample-link')
     .first();
   const sampleId = await sampleLink.getAttribute('title');
-  expect(sampleId).toMatch(/^DEMO-\d{4}$/);
+  expect(sampleId).toMatch(/^DEMO-\d{4}\.wav$/);
   await sampleLink.click();
 
   const inspector = page.getByRole('complementary', {

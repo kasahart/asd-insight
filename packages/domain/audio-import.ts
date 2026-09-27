@@ -1,5 +1,5 @@
 import type { DataRow, Dataset } from './demo.ts';
-import { resolveAudio, unusedColumn } from './data.ts';
+import { resolveAudio, unusedColumn, type AudioResolution } from './data.ts';
 
 export type AudioAudit = ReturnType<typeof auditAudioMatches>;
 
@@ -68,19 +68,57 @@ export function audioListDisplay<T>(
   files: Map<string, T>,
 ) {
   const match = resolveAudio(row, index, idColumn, audioColumn, files);
+
+  // The list describes the source CSV value. WAV matching is a separate
+  // concern: a missing or ambiguous attachment must not replace the value the
+  // user supplied in the dataset.
+  if (audioColumn) {
+    const sourceValue = String(row[audioColumn] ?? '');
+    const normalized = sourceValue.replaceAll('\\', '/');
+    const filename = normalized.split('/').at(-1) || `行${index + 1}`;
+    return {
+      filename,
+      path: sourceValue,
+      status: audioMatchStatus(match, audioColumn, sourceValue),
+    };
+  }
+
   if (match.key) {
     const parts = match.key.split('/');
     return { filename: parts.at(-1) ?? match.key, path: match.key, status: '' };
   }
-  const status =
-    match.reason === 'ambiguous'
-      ? '曖昧: 同名WAVが複数あります'
-      : match.reason === 'audio-column-empty'
-        ? '未対応: 音声列が空欄です'
-        : match.reason === 'no-files'
-          ? '未対応: WAVフォルダが未指定です'
-          : '未対応: 対応するWAVがありません';
-  return { filename: `行${index + 1}（${status}）`, path: status, status };
+  return {
+    filename: `行${index + 1}`,
+    path: '',
+    status: audioMatchStatus(match, audioColumn, ''),
+  };
+}
+
+function audioMatchStatus<T>(
+  match: AudioResolution<T>,
+  audioColumn: string,
+  sourceValue: string,
+): string {
+  switch (match.reason) {
+    case 'matched':
+      return '';
+    case 'ambiguous':
+      return `曖昧: 同名WAVが複数あります（候補: ${match.candidates?.join('、') ?? ''}）。CSVに相対パスを指定してください。`;
+    case 'no-files':
+      return '未対応: WAVフォルダが未指定です。WAVフォルダを選択してください。';
+    case 'audio-column-empty':
+      return `未対応: 音声列「${audioColumn}」が空欄です。`;
+    case 'source-id-empty':
+      return '未対応: サンプル名の元IDが空欄で、対応するファイル名を決められません。';
+    case 'name-mismatch': {
+      const expected = match.expectedNames.filter(Boolean).join('、');
+      return sourceValue
+        ? `未対応: CSVの音声値「${sourceValue}」に対応するWAVがありません。WAVフォルダ内の相対パスを確認してください。`
+        : `未対応: 対応するWAVがありません${expected ? `（期待: ${expected}）` : ''}。`;
+    }
+    default:
+      return '未対応: 対応するWAVがありません。';
+  }
 }
 
 /** Adds folder attributes automatically; source CSV rows remain untouched. */

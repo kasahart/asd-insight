@@ -246,7 +246,7 @@ test('responsive boundaries keep the startup dialog and main workbench inside th
     .locator('tbody[aria-label="一覧の表示ページ"] button.sample-link')
     .first();
   const sampleId = await sampleLink.getAttribute('title');
-  expect(sampleId).toMatch(/^DEMO-\d{4}$/);
+  expect(sampleId).toMatch(/^DEMO-\d{4}\.wav$/);
   await sampleLink.click();
   const inspector = page.getByRole('complementary', {
     name: '選択サンプルの詳細',
@@ -303,7 +303,7 @@ test('320px keeps search, table scrolling, sorting, and score cells usable', asy
   expect(inputBox!.width).toBeGreaterThanOrEqual(labelBox!.width - 8);
 
   await page.getByLabel('検索一致方法', { exact: true }).selectOption('exact');
-  await query.fill('DEMO-0001');
+  await query.fill('DEMO-0001.wav');
   await expect(
     page.getByRole('heading', { name: /^サンプル一覧/ }),
   ).toContainText('1件');

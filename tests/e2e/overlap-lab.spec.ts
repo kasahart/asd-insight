@@ -246,7 +246,7 @@ test('一覧からサンプルを選ぶと詳細パネルと参照行が切り�
     .locator('tbody[aria-label="一覧の表示ページ"] button.sample-link')
     .first();
   const sampleId = await sampleLink.getAttribute('title');
-  expect(sampleId).toMatch(/^DEMO-\d{4}$/);
+  expect(sampleId).toMatch(/^DEMO-\d{4}\.wav$/);
   await sampleLink.click();
 
   const inspector = page.getByRole('complementary', {
@@ -286,7 +286,7 @@ test('合成デモの選択とメモが保存され、reload後に分析とし�
     .locator('tbody[aria-label="一覧の表示ページ"] button.sample-link')
     .first();
   const sampleId = await sampleLink.getAttribute('title');
-  expect(sampleId).toMatch(/^DEMO-\d{4}$/);
+  expect(sampleId).toMatch(/^DEMO-\d{4}\.wav$/);
   await sampleLink.click();
   await expect(
     page.getByRole('complementary', { name: '選択サンプルの詳細' }),

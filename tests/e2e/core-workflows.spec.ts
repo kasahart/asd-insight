@@ -239,7 +239,7 @@ test('サンプルを除外し、除外のみから同じサンプルを復活�
     .locator('tbody[aria-label="一覧の表示ページ"] button.sample-link')
     .first();
   const sampleId = await sampleLink.getAttribute('title');
-  expect(sampleId).toMatch(/^DEMO-\d{4}$/);
+  expect(sampleId).toMatch(/^DEMO-\d{4}\.wav$/);
   await sampleLink.click();
 
   const inspector = page.getByRole('complementary', {
@@ -306,7 +306,7 @@ test('サンプル名検索とページ送りが一覧件数に反映される',
     .locator('tbody[aria-label="一覧の表示ページ"] button.sample-link')
     .first();
   const sampleId = await firstDisplayed.getAttribute('title');
-  expect(sampleId).toMatch(/^DEMO-\d{4}$/);
+  expect(sampleId).toMatch(/^DEMO-\d{4}\.wav$/);
 
   const query = page.getByLabel('ファイル名・相対パスで検索', { exact: true });
   await query.fill(sampleId!);

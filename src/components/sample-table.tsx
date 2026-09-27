@@ -53,6 +53,7 @@ function sameSample(left: Sample, right: Sample): boolean {
 export function SampleTable({
   samples,
   idColumn,
+  audioColumn = '',
   datasetColumns = [],
   audioDisplay,
   scoreColumn,
@@ -68,6 +69,7 @@ export function SampleTable({
 }: {
   samples: Sample[];
   idColumn: string;
+  audioColumn?: string;
   datasetColumns?: readonly string[];
   audioDisplay?: readonly { filename: string; path: string; status: string }[];
   scoreColumn: string;
@@ -154,30 +156,47 @@ export function SampleTable({
           audioDisplay?.[s.index]?.filename ??
           (idColumn ? s.row[idColumn] : 'row-' + (s.index + 1)),
         header: 'ファイル名',
-        cell: (ctx) => (
-          <button
-            type="button"
-            className="sample-link"
-            onClick={(event) => {
-              event.stopPropagation();
-              pendingSelectionFocus.current =
-                ctx.row.original.index === selected
-                  ? null
-                  : ctx.row.original.index;
-              onSelect(ctx.row.original);
-              inspect('sample');
-            }}
-            title={String(ctx.getValue())}
-            aria-label={String(ctx.getValue()) + ' を選択'}
-          >
-            <FileAudio
-              size={13}
-              opacity={hasAudio(ctx.row.original) ? 1 : 0.25}
-            />
-            <span>{abbreviateSampleId(String(ctx.getValue()))}</span>
-            {notes[ctx.row.original.index] && <StickyNote size={11} />}
-          </button>
-        ),
+        cell: (ctx) => {
+          const audioAvailable = hasAudio(ctx.row.original);
+          const audioStatus = audioAvailable
+            ? ''
+            : audioDisplay?.[ctx.row.original.index]?.status ||
+              '未対応: 対応するWAVがありません。';
+          return (
+            <button
+              type="button"
+              className="sample-link"
+              onClick={(event) => {
+                event.stopPropagation();
+                pendingSelectionFocus.current =
+                  ctx.row.original.index === selected
+                    ? null
+                    : ctx.row.original.index;
+                onSelect(ctx.row.original);
+                inspect('sample');
+              }}
+              title={String(ctx.getValue())}
+              aria-label={String(ctx.getValue()) + ' を選択'}
+            >
+              <span
+                className="sample-audio-status"
+                title={audioStatus || undefined}
+                aria-label={
+                  audioStatus ? `音声未対応: ${audioStatus}` : undefined
+                }
+                role={audioStatus ? 'img' : undefined}
+              >
+                <FileAudio
+                  size={13}
+                  className="sample-audio-icon"
+                  opacity={audioAvailable ? 1 : 0.25}
+                />
+              </span>
+              <span>{abbreviateSampleId(String(ctx.getValue()))}</span>
+              {notes[ctx.row.original.index] && <StickyNote size={11} />}
+            </button>
+          );
+        },
       },
       ...(audioDisplay
         ? [
@@ -190,7 +209,7 @@ export function SampleTable({
                   className="attribute-cell audio-path-cell"
                   title={String(ctx.getValue())}
                 >
-                  {String(ctx.getValue())}
+                  {String(ctx.getValue()) || '—'}
                 </span>
               ),
             } satisfies ColumnDef<Sample>,
@@ -272,7 +291,12 @@ export function SampleTable({
           <ScoreValue value={ctx.row.original.row[comparisonColumn]} />
         ),
       });
-    const shown = new Set([scoreColumn, groupColumn, comparisonColumn]);
+    const shown = new Set([
+      scoreColumn,
+      groupColumn,
+      comparisonColumn,
+      audioColumn,
+    ]);
     for (const column of datasetColumns) {
       if (shown.has(column)) continue;
       result.splice(result.length - 1, 0, {
@@ -289,6 +313,7 @@ export function SampleTable({
     return result;
   }, [
     idColumn,
+    audioColumn,
     datasetColumns,
     audioDisplay,
     scoreColumn,

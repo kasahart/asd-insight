@@ -581,18 +581,27 @@ function DiagnosticsWorkspace() {
   const folderCandidates = folderAttributeCandidates(
     pendingAudio?.files ?? audioFiles,
   );
+  const audioDisplayColumn = sourceData.demo
+    ? sourceData.columns.includes('audio_file')
+      ? 'audio_file'
+      : ''
+    : audioColumn;
   const audioDisplay = useMemo(
     () =>
-      sourceData.rows.map((row, index) =>
-        sourceData.demo
-          ? {
-              filename: row.sample_id ?? `行${index + 1}`,
-              path: row.audio_file ?? '',
-              status: '',
-            }
-          : audioListDisplay(row, index, idColumn, audioColumn, audioFiles),
-      ),
-    [sourceData, idColumn, audioColumn, audioFiles],
+      sourceData.rows.map((row, index) => {
+        // The synthetic demo uses the same CSV-style audio_file value as a
+        // normal import. Its audio is generated on demand, so it is available
+        // without a locally attached WAV.
+        const display = audioListDisplay(
+          row,
+          index,
+          idColumn,
+          audioDisplayColumn,
+          audioFiles,
+        );
+        return sourceData.demo ? { ...display, status: '' } : display;
+      }),
+    [sourceData, idColumn, audioDisplayColumn, audioFiles],
   );
   const sampleLabels = useMemo(
     () => audioDisplay.map(({ filename }) => filename),
@@ -1812,6 +1821,7 @@ function DiagnosticsWorkspace() {
                                     pending={review.pending}
                                     samples={review.listed}
                                     idColumn={idColumn}
+                                    audioColumn={audioDisplayColumn}
                                     datasetColumns={data.columns}
                                     audioDisplay={audioDisplay}
                                     scoreColumn={score}

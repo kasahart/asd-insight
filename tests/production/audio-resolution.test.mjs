@@ -149,23 +149,64 @@ test('folder keys distinguish equal names, and basename-only references require 
   );
   assert.deepEqual(
     audioListDisplay(
+      { id: '001' },
+      0,
+      'id',
+      '',
+      new Map([['正常/設備A/001.wav', normal]]),
+    ),
+    { filename: '001.wav', path: '正常/設備A/001.wav', status: '' },
+  );
+  assert.deepEqual(
+    audioListDisplay(
       { audio_file: '正常/設備A/001.wav' },
       0,
       '',
       'audio_file',
       files,
     ),
-    { filename: '001.wav', path: '正常/設備A/001.wav', status: '' },
+    {
+      filename: '001.wav',
+      path: '正常/設備A/001.wav',
+      status: '',
+    },
   );
-  assert.match(
-    audioListDisplay({ audio_file: '001.wav' }, 2, '', 'audio_file', files)
-      .path,
-    /曖昧: 同名WAVが複数/,
+  const ambiguousDisplay = audioListDisplay(
+    { audio_file: '001.wav' },
+    2,
+    '',
+    'audio_file',
+    files,
   );
+  assert.deepEqual(ambiguousDisplay, {
+    filename: '001.wav',
+    path: '001.wav',
+    status:
+      '曖昧: 同名WAVが複数あります（候補: 正常/設備A/001.wav、要確認/設備B/001.wav）。CSVに相対パスを指定してください。',
+  });
+  const missingDisplay = audioListDisplay(
+    { audio_file: 'missing.wav' },
+    3,
+    '',
+    'audio_file',
+    files,
+  );
+  assert.equal(missingDisplay.filename, 'missing.wav');
+  assert.equal(missingDisplay.path, 'missing.wav');
+  assert.match(missingDisplay.status, /CSVの音声値「missing\.wav」/);
+  const noFolderDisplay = audioListDisplay(
+    { audio_file: '001.wav' },
+    0,
+    '',
+    'audio_file',
+    new Map(),
+  );
+  assert.equal(noFolderDisplay.filename, '001.wav');
+  assert.equal(noFolderDisplay.path, '001.wav');
+  assert.match(noFolderDisplay.status, /WAVフォルダが未指定/);
   assert.match(
-    audioListDisplay({ audio_file: 'missing.wav' }, 3, '', 'audio_file', files)
-      .filename,
-    /行4（未対応: 対応するWAVがありません）/,
+    audioListDisplay({ audio_file: '' }, 1, '', 'audio_file', files).status,
+    /音声列「audio_file」が空欄/,
   );
 });
 

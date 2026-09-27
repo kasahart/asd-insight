@@ -80,7 +80,7 @@ test('階層WAVの自動属性化と一覧での対応状況', async ({ page }) 
     ).toBeVisible();
     await expect(
       table.getByRole('columnheader', { name: /audio_file/ }),
-    ).toBeVisible();
+    ).toHaveCount(0);
     await expect(
       table.getByRole('columnheader', { name: /WAVフォルダ階層1/ }),
     ).toBeVisible();
@@ -88,19 +88,42 @@ test('階層WAVの自動属性化と一覧での対応状況', async ({ page }) 
       table.getByText('正常/設備A/001.wav', { exact: true }).first(),
     ).toBeVisible();
     await expect(
-      table.getByText('曖昧: 同名WAVが複数あります', { exact: true }).first(),
+      table.getByText('001.wav', { exact: true }).first(),
     ).toBeVisible();
-    await expect(
-      table
-        .getByText('未対応: 対応するWAVがありません', { exact: true })
-        .first(),
-    ).toBeVisible();
+    const ambiguousIcon = table.locator(
+      '.sample-audio-status[title*="曖昧: 同名WAVが複数あります"]',
+    );
+    await expect(ambiguousIcon).toHaveCount(1);
+    await ambiguousIcon.hover();
+    const ambiguityReason = await ambiguousIcon.getAttribute('title');
+    expect(ambiguityReason).toBeTruthy();
+    expect(ambiguityReason ?? '').toContain('正常/設備A/001.wav');
+    expect(ambiguityReason ?? '').toContain('要確認/設備B/001.wav');
+    await expect(ambiguousIcon).toHaveAttribute('role', 'img');
+    await expect(ambiguousIcon).toHaveAttribute(
+      'aria-label',
+      /音声未対応: 曖昧: 同名WAVが複数あります/,
+    );
+    const missingIcon = table.locator(
+      '.sample-audio-status[title*="CSVの音声値「missing.wav」"]',
+    );
+    await expect(missingIcon).toHaveCount(1);
+    await missingIcon.hover();
+    await expect(missingIcon.locator('.sample-audio-icon')).toHaveAttribute(
+      'opacity',
+      '0.25',
+    );
+    await expect(table.getByText(/CSVの音声値「missing\.wav」/)).toHaveCount(0);
     await table.getByRole('button', { name: /相対パス：.*昇順にする/ }).click();
     await expect(
       table.getByRole('columnheader', { name: /相対パス/ }),
     ).toHaveAttribute('aria-sort', 'ascending');
     const search = page.getByLabel('ファイル名・相対パスで検索');
     await search.fill('正常/設備A/001.wav');
+    await expect(
+      page.getByRole('heading', { name: /^サンプル一覧/ }),
+    ).toContainText('1件');
+    await search.fill('missing.wav');
     await expect(
       page.getByRole('heading', { name: /^サンプル一覧/ }),
     ).toContainText('1件');
