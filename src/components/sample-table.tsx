@@ -63,6 +63,8 @@ function normalizeColumnVisibility(
   const visibility = Object.fromEntries(
     availableIds.map((id) => [id, stored[id] !== false]),
   );
+  // The sample column contains the keyboard-accessible row selection control.
+  if (availableIds.includes('sample')) visibility.sample = true;
   // Keep the table usable if a malformed saved preference hid every column.
   if (availableIds.length && !Object.values(visibility).some(Boolean))
     visibility[availableIds[0]] = true;
@@ -373,64 +375,77 @@ export function SampleTable({
     [storedColumnVisibility, availableColumnIds],
   );
   const effectiveColumnOrder = useMemo(() => {
-    const available = new Set(availableColumnIds);
+    const movable = availableColumnIds.filter((id) => id !== 'aggregation');
+    const available = new Set(movable);
     const saved = Array.isArray(storedColumnOrder)
       ? storedColumnOrder.filter(
           (id): id is string => typeof id === 'string' && available.has(id),
         )
       : [];
-    return [...new Set([...saved, ...availableColumnIds])];
+    const ordered = [...new Set([...saved, ...movable])];
+    return availableColumnIds.includes('aggregation')
+      ? [...ordered, 'aggregation']
+      : ordered;
   }, [storedColumnOrder, availableColumnIds]);
   function changeColumnVisibility(
     updater: VisibilityState | ((previous: VisibilityState) => VisibilityState),
   ) {
-    setStoredColumnVisibility((previous) => {
-      const current = normalizeColumnVisibility(previous, availableColumnIds);
-      const next = typeof updater === 'function' ? updater(current) : updater;
-      const visibility = normalizeColumnVisibility(next, availableColumnIds);
-      const hidden = new Set(
-        availableColumnIds.filter(
-          (id) => current[id] !== false && visibility[id] === false,
-        ),
-      );
-      if (effectiveSorting.some((sort) => hidden.has(sort.id))) {
-        const remaining = effectiveSorting.filter((sort) => !hidden.has(sort.id));
-        if (remaining.length) setSorting(remaining);
-        else {
-          const fallback = columns.find(
-            (column) =>
-              column.id &&
-              !hidden.has(column.id) &&
-              visibility[column.id] !== false &&
-              column.enableSorting !== false,
-          );
-          setSorting(
-            fallback?.id ? [{ id: fallback.id, desc: false }] : [],
-          );
-        }
+    const current = normalizeColumnVisibility(
+      storedColumnVisibility,
+      availableColumnIds,
+    );
+    const next = typeof updater === 'function' ? updater(current) : updater;
+    const visibility = normalizeColumnVisibility(next, availableColumnIds);
+    const hidden = new Set(
+      availableColumnIds.filter(
+        (id) => current[id] !== false && visibility[id] === false,
+      ),
+    );
+    let nextSorting: SortingState | undefined;
+    if (effectiveSorting.some((sort) => hidden.has(sort.id))) {
+      const remaining = effectiveSorting.filter((sort) => !hidden.has(sort.id));
+      if (remaining.length) nextSorting = remaining;
+      else {
+        const fallback = columns.find(
+          (column) =>
+            column.id &&
+            !hidden.has(column.id) &&
+            visibility[column.id] !== false &&
+            column.enableSorting !== false,
+        );
+        nextSorting = fallback?.id ? [{ id: fallback.id, desc: false }] : [];
       }
-      return visibility;
-    });
+    }
+    // Each update reads the controller's latest snapshot. Do not trigger the
+    // sorting update from inside the column-visibility updater: the controller
+    // applies functional updates against a captured snapshot and could overwrite
+    // the nested sort change with that older state.
+    if (nextSorting) setSorting(nextSorting);
+    setStoredColumnVisibility(visibility);
   }
   function changeColumnOrder(
     updater: ColumnOrderState | ((previous: ColumnOrderState) => ColumnOrderState),
   ) {
-    setStoredColumnOrder((previous) => {
-      const available = new Set(availableColumnIds);
-      const current = Array.isArray(previous)
-        ? previous.filter(
-            (id): id is string => typeof id === 'string' && available.has(id),
-          )
-        : [];
-      const order = [...new Set([...current, ...availableColumnIds])];
-      const next = typeof updater === 'function' ? updater(order) : updater;
-      const valid = Array.isArray(next)
-        ? next.filter(
-            (id): id is string => typeof id === 'string' && available.has(id),
-          )
-        : [];
-      return [...new Set([...valid, ...availableColumnIds])];
-    });
+    const movable = availableColumnIds.filter((id) => id !== 'aggregation');
+    const available = new Set(movable);
+    const current = Array.isArray(storedColumnOrder)
+      ? storedColumnOrder.filter(
+          (id): id is string => typeof id === 'string' && available.has(id),
+        )
+      : [];
+    const order = [...new Set([...current, ...movable])];
+    const next = typeof updater === 'function' ? updater(order) : updater;
+    const valid = Array.isArray(next)
+      ? next.filter(
+          (id): id is string => typeof id === 'string' && available.has(id),
+        )
+      : [];
+    const nextOrder = [...new Set([...valid, ...movable])];
+    setStoredColumnOrder(
+      availableColumnIds.includes('aggregation')
+        ? [...nextOrder, 'aggregation']
+        : nextOrder,
+    );
   }
   const table = useReactTable({
     data: pageSamples,
@@ -583,10 +598,12 @@ export function SampleTable({
   const orderedColumns = table.getAllLeafColumns();
   const visibleColumnCount = table.getVisibleLeafColumns().length;
   function moveColumn(columnId: string, direction: -1 | 1) {
+    if (columnId === 'aggregation') return;
     const current = orderedColumns.map((column) => column.id);
     const from = current.indexOf(columnId);
     const to = from + direction;
     if (from < 0 || to < 0 || to >= current.length) return;
+    if (direction > 0 && current[to] === 'aggregation') return;
     [current[from], current[to]] = [current[to], current[from]];
     changeColumnOrder(current);
   }
@@ -601,7 +618,7 @@ export function SampleTable({
         </summary>
         <div className="table-column-settings">
           <p>
-            列の表示を切り替え、上下ボタンで順序を変更できます。少なくとも1列は表示されます。ソート中の列を隠すと、表示中の列で並べ替えます。
+            列の表示を切り替え、上下ボタンで順序を変更できます。ファイル名列は選択操作のため常に表示し、集計列は右端に固定します。ソート中の列を隠すと、表示中の列で並べ替えます。
           </p>
           <ul aria-label="一覧の列設定">
             {orderedColumns.map((column, index) => {
@@ -615,8 +632,12 @@ export function SampleTable({
                     <input
                       type="checkbox"
                       checked={visible}
-                      disabled={lastVisible}
-                      aria-label={`${label}列を表示`}
+                      disabled={column.id === 'sample' || lastVisible}
+                      aria-label={
+                        column.id === 'sample'
+                          ? `${label}列を常に表示`
+                          : `${label}列を表示`
+                      }
                       onChange={column.getToggleVisibilityHandler()}
                     />
                     <span>{label}</span>
@@ -627,7 +648,7 @@ export function SampleTable({
                       variant="ghost"
                       size="icon-xs"
                       aria-label={`${label}列を上へ`}
-                      disabled={index === 0}
+                      disabled={index === 0 || column.id === 'aggregation'}
                       onClick={() => moveColumn(column.id, -1)}
                     >
                       <ChevronUp size={14} />
@@ -637,7 +658,10 @@ export function SampleTable({
                       variant="ghost"
                       size="icon-xs"
                       aria-label={`${label}列を下へ`}
-                      disabled={index === orderedColumns.length - 1}
+                      disabled={
+                        column.id === 'aggregation' ||
+                        index >= orderedColumns.length - 2
+                      }
                       onClick={() => moveColumn(column.id, 1)}
                     >
                       <ChevronDown size={14} />

@@ -5,9 +5,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import React from 'react';
 import { act, create } from 'react-test-renderer';
 import { build } from 'esbuild';
+import { createBrowserRepository } from '../../packages/browser-storage/index.ts';
 import { evaluateDataset } from '../../packages/domain/evaluation.ts';
 import { histogram } from '../../packages/domain/distribution.ts';
 import { sortReviewSamples } from '../../packages/domain/evaluation-sorting.ts';
+import { WorkspaceController as RealWorkspaceController } from '../../src/state/workspace-controller.ts';
 
 // Production components, with only the worker result and Recharts layout
 // boundaries injected. No browser, HTTP request, or prototype component runs.
@@ -350,8 +352,36 @@ test('manual pagination shares pinned columns, renders at most eight page rows a
 });
 
 test('sample table columns can be hidden, reordered and restored from the saved analysis state', async () => {
-  const app = await tableFixture({ datasetColumns: ['quality'] });
+  const app = await tableFixture(
+    { datasetColumns: ['quality'] },
+    {
+      tableColumnVisibility: { sample: false },
+      tableColumnOrder: [
+        'aggregation',
+        'sample',
+        'relative-path',
+        'group',
+        'score',
+        'attribute',
+        'data:quality',
+      ],
+    },
+  );
   assert.equal(reference(app.tree).findAllByType('td').length, 7);
+  const sampleVisibility = app.tree.root.findByProps({
+    'aria-label': 'ファイル名列を常に表示',
+  });
+  assert.equal(sampleVisibility.props.checked, true);
+  assert.equal(sampleVisibility.props.disabled, true);
+  assert.ok(
+    listed(app.tree).findAllByProps({ className: 'sample-link' }).length > 0,
+  );
+  assert.equal(
+    reference(app.tree).findAllByType('td').at(-1).props['data-column'],
+    'aggregation',
+  );
+  assert.equal(button(app.tree, '集計列を上へ').props.disabled, true);
+  assert.equal(button(app.tree, 'quality列を下へ').props.disabled, true);
 
   const relativePath = app.tree.root.findByProps({
     'aria-label': '相対パス列を表示',
@@ -371,6 +401,10 @@ test('sample table columns can be hidden, reordered and restored from the saved 
   assert.equal(
     app.store.getSnapshot().active.record.state.tableColumnOrder[2],
     'score',
+  );
+  assert.equal(
+    app.store.getSnapshot().active.record.state.tableColumnOrder.at(-1),
+    'aggregation',
   );
   assert.equal(
     app.store.getSnapshot().active.record.state.tableColumnVisibility[
@@ -428,6 +462,73 @@ test('hiding the active sort column moves sorting to a visible column', async ()
     [{ id: 'sample', desc: false }],
   );
   assert.deepEqual(names(app.tree), samples.slice(0, 8).map((s) => s.row.filename));
+});
+
+test('column visibility and sort changes both survive the real WorkspaceController update path', async () => {
+  const repository = await createBrowserRepository({ mode: 'memory' });
+  const dataset = {
+    name: 'samples.csv',
+    columns: ['filename', 'score', 'group', 'label'],
+    rows: samples.map((sample) => ({
+      filename: sample.row.filename,
+      score: String(sample.score),
+      group: sample.group,
+      label: sample.row.label,
+    })),
+    demo: false,
+  };
+  const record = await repository.createSession({
+    title: 'Table controller regression',
+    dataset,
+    source: new File(['filename,score,group,label\n'], 'samples.csv', {
+      type: 'text/csv',
+    }),
+    audioFiles: new Map(),
+    state: {
+      schemaVersion: 1,
+      rowCount: samples.length,
+      score: 'score',
+      idColumn: 'filename',
+      group: {
+        kind: 'category',
+        column: 'label',
+        a: 'normal',
+        b: 'anomaly',
+      },
+      notes: {},
+      query: '',
+      tableSorting: [{ id: 'score', desc: true }],
+    },
+  });
+  const store = new RealWorkspaceController(repository, 60_000);
+  let tree;
+  try {
+    await store.open(record.id);
+    await act(async () => {
+      tree = create(
+        h(Wrap, { store }, h(TableScenario, { options: { samples } })),
+      );
+    });
+    await act(async () =>
+      tree.root
+        .findByProps({ 'aria-label': 'score列を表示' })
+        .props.onChange({
+          target: { checked: false },
+          currentTarget: { checked: false },
+        }),
+    );
+    assert.deepEqual(
+      store.getSnapshot().active.record.state.tableSorting,
+      [{ id: 'sample', desc: false }],
+    );
+    assert.equal(
+      store.getSnapshot().active.record.state.tableColumnVisibility.score,
+      false,
+    );
+  } finally {
+    if (tree) await act(async () => tree.unmount());
+    store.dispose();
+  }
 });
 
 test('blank source audio values keep the row action and identify the sample by its source ID', async () => {
