@@ -693,6 +693,8 @@ export function validateApplicationState(
     'inspectorWidth',
     'spectrogramPreferences',
     'tableSorting',
+    'tableColumnVisibility',
+    'tableColumnOrder',
     'pagination',
     'viewport',
     'thresholdSetting',
@@ -1000,6 +1002,48 @@ export function validateApplicationState(
       else invalid('tableSorting');
     }
   }
+  const tableColumnId = (value: unknown, field: string) => {
+    text(value, field, 8192);
+    if (
+      [
+        'sample',
+        'relative-path',
+        'group',
+        'score',
+        'attribute',
+        'aggregation',
+      ].includes(value)
+    )
+      return;
+    if (value.startsWith('comparison-score:') && value.slice(17))
+      column(value.slice(17), field);
+    else if (value.startsWith('data:') && value.slice(5))
+      column(value.slice(5), field);
+    else invalid(field);
+  };
+  if (state.tableColumnVisibility !== undefined) {
+    const visibility = object(
+      state.tableColumnVisibility,
+      'tableColumnVisibility',
+    );
+    if (Object.keys(visibility).length > 4096)
+      invalid('tableColumnVisibility');
+    for (const [id, visible] of Object.entries(visibility)) {
+      tableColumnId(id, 'tableColumnVisibility');
+      bool(visible, 'tableColumnVisibility');
+    }
+  }
+  if (state.tableColumnOrder !== undefined) {
+    const order = state.tableColumnOrder;
+    if (!Array.isArray(order) || order.length > 4096)
+      invalid('tableColumnOrder');
+    const seen = new Set<string>();
+    for (const id of order) {
+      tableColumnId(id, 'tableColumnOrder');
+      if (seen.has(id)) invalid('tableColumnOrder');
+      seen.add(id);
+    }
+  }
   for (const name of ['pagination'])
     if (state[name] !== undefined) {
       const p = object(state[name], name);
@@ -1044,7 +1088,14 @@ export function validateApplicationState(
     keys(f, ['filter', 'scope'], 'filterDecision');
     choice(
       f.filter,
-      ['all', 'false-positive', 'false-negative', 'ignored'],
+      [
+        'all',
+        'false-positive',
+        'ok-group-ok',
+        'opposite-group-ng',
+        'false-negative',
+        'ignored',
+      ],
       'filterDecision',
     );
     text(f.scope, 'filterDecision');

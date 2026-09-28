@@ -191,36 +191,74 @@ export function ThresholdPanel({
                 : `指定上限 ${report.calibration.targetPercent}%`}
             </span>
           </div>
-          <dl className="threshold-summary-metrics">
-            <div>
-              <dt>OK基準群のNG候補率</dt>
-              <dd>
-                <strong>
-                  {ok.detectedPercent === null
-                    ? '—'
-                    : `${formatNumber(ok.detectedPercent, 3)}%`}
-                </strong>
-                <span>
-                  {ok.detected.toLocaleString()} / {ok.total.toLocaleString()}件
-                </span>
-              </dd>
-            </div>
-            <div>
-              <dt>反対群の未検出率</dt>
-              <dd>
-                <strong>
-                  {other.notDetectedPercent === null
-                    ? '—'
-                    : `${formatNumber(other.notDetectedPercent, 3)}%`}
-                </strong>
-                <span>
-                  {other.notDetected.toLocaleString()} /{' '}
-                  {other.total.toLocaleString()}件
-                </span>
-                {!other.total && <small>有効スコア0件</small>}
-              </dd>
-            </div>
-          </dl>
+          <div className="threshold-classification-matrix-wrap">
+            <table
+              className="threshold-classification-matrix"
+              aria-label="仮しきい値の2×2候補分類"
+            >
+              <thead>
+                <tr>
+                  <th scope="col">比較群</th>
+                  <th scope="col">OK候補</th>
+                  <th scope="col">NG候補</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">
+                    OK基準群：群{report.okGroup}
+                    <small>
+                      {report.okGroup === 'A' ? labelA : labelB}
+                    </small>
+                  </th>
+                  <td data-classification="ok-group-ok">
+                    <strong>
+                      {fraction(
+                        ok.notDetected,
+                        ok.total,
+                        ok.notDetectedPercent,
+                      )}
+                    </strong>
+                    <small>OK基準群のOK候補</small>
+                  </td>
+                  <td data-classification="ok-group-ng">
+                    <strong>
+                      {fraction(ok.detected, ok.total, ok.detectedPercent)}
+                    </strong>
+                    <small>OK基準群のNG候補</small>
+                  </td>
+                </tr>
+                <tr>
+                  <th scope="row">
+                    反対群：群{report.okGroup === 'A' ? 'B' : 'A'}
+                    <small>
+                      {report.okGroup === 'A' ? labelB : labelA}
+                    </small>
+                  </th>
+                  <td data-classification="opposite-group-ok">
+                    <strong>
+                      {fraction(
+                        other.notDetected,
+                        other.total,
+                        other.notDetectedPercent,
+                      )}
+                    </strong>
+                    <small>反対群のOK候補</small>
+                  </td>
+                  <td data-classification="opposite-group-ng">
+                    <strong>
+                      {fraction(
+                        other.detected,
+                        other.total,
+                        other.detectedPercent,
+                      )}
+                    </strong>
+                    <small>反対群のNG候補</small>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
           <p className="threshold-summary-scope">比較対象全体・除外後</p>
           <PersistentDetails
             preferenceKey="threshold.breakdown"

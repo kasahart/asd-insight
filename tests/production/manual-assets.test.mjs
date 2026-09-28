@@ -146,7 +146,7 @@ test('manual is a self-contained static bundle and prepare-static copies it exac
     '調査メモ',
     'スコア0.7の区間をクリック',
     '計算対象全体 6件 / 一覧表示 1件',
-    '一覧範囲の横の「解除」',
+    'ヒストグラム上の「選択範囲を解除」',
     '端末に保存済み',
     '再読込',
     '保存した分析',

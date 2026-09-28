@@ -3,10 +3,11 @@ import { useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PersistentDetails } from '@/components/view-preferences';
+import { useThreshold } from '@/components/threshold-context';
 import { useWorkspace } from '@/state/workspace-context';
 import type { Dataset } from '@/lib/demo';
 import type { Sample } from '@/lib/data';
-import type { ReviewFilter } from '@/lib/sample-review';
+import { isClassificationFilter, type ReviewFilter } from '@/lib/sample-review';
 import type {
   IgnoredSample,
   SampleReviewState,
@@ -30,6 +31,7 @@ export function SampleReviewControls({
   onClearSearch: () => void;
 }) {
   const { controller, status, conflict } = useWorkspace();
+  const { okGroup, okGroupLabel, otherGroupLabel } = useThreshold();
   const mode = controller.repository.mode;
   const listedIgnoredIndices = new Set(
     review.ignoredInList.map((sample) => sample.index),
@@ -54,6 +56,38 @@ export function SampleReviewControls({
   function chooseFilter(next: ReviewFilter) {
     review.setFilter(next === review.filter ? 'all' : next);
   }
+  const okRowLabel = `OK基準群：群${okGroup}（${okGroupLabel ?? `群${okGroup}`}）`;
+  const otherGroup = okGroup === 'A' ? 'B' : 'A';
+  const otherRowLabel = `反対群：群${otherGroup}（${otherGroupLabel ?? `群${otherGroup}`}）`;
+  const matrixCounts = review.counts.matrix;
+  const renderCell = (
+    filter: Exclude<ReviewFilter, 'all' | 'ignored'>,
+    label: string,
+    count: number | null,
+  ) => (
+    <td
+      data-candidate-cell={
+        filter === 'false-positive' || filter === 'false-negative'
+      }
+    >
+      <Button
+        className="candidate-filter-cell"
+        variant={review.filter === filter ? 'secondary' : 'outline'}
+        aria-pressed={review.filter === filter}
+        aria-describedby="candidate-semantics-note"
+        onClick={() => chooseFilter(filter)}
+      >
+        <span>{label}</span>
+        {count !== null && !review.pending ? (
+          <b>{count.toLocaleString()}件</b>
+        ) : (
+          <small>
+            {review.pending ? '計算中' : '未設定時は1%で仮設定'}
+          </small>
+        )}
+      </Button>
+    </td>
+  );
   return (
     <div className="sample-review-controls">
       <div className="review-filter-toolbar">
@@ -61,66 +95,81 @@ export function SampleReviewControls({
           className="review-filter-buttons"
           aria-label="候補・除外によるサンプルフィルタ"
         >
-          <Button
-            variant={review.filter === 'all' ? 'secondary' : 'outline'}
-            aria-pressed={review.filter === 'all'}
-            onClick={() => chooseFilter('all')}
-          >
-            すべて{' '}
-            <b>
-              {review.pending
-                ? '計算中'
-                : (
-                    review.counts.all + review.ignoredInList.length
-                  ).toLocaleString()}
-              {review.pending ? '' : '件'}
-            </b>
-          </Button>
-          <Button
-            variant={
-              review.filter === 'false-positive' ? 'secondary' : 'outline'
-            }
-            aria-pressed={review.filter === 'false-positive'}
-            aria-describedby="candidate-semantics-note"
-            onClick={() => chooseFilter('false-positive')}
-          >
-            <span>OK基準群のNG候補</span>
-            {review.counts.falsePositive !== null && (
-              <b>{review.counts.falsePositive.toLocaleString()}件</b>
-            )}
-            {review.counts.falsePositive === null && !review.pending && (
-              <small>未設定時は1%で仮設定</small>
-            )}
-          </Button>
-          <Button
-            variant={
-              review.filter === 'false-negative' ? 'secondary' : 'outline'
-            }
-            aria-pressed={review.filter === 'false-negative'}
-            aria-describedby="candidate-semantics-note"
-            onClick={() => chooseFilter('false-negative')}
-          >
-            <span>反対群のOK候補</span>
-            {review.counts.falseNegative !== null && (
-              <b>{review.counts.falseNegative.toLocaleString()}件</b>
-            )}
-            {review.counts.falseNegative === null && !review.pending && (
-              <small>未設定時は1%で仮設定</small>
-            )}
-          </Button>
-          <Button
-            variant={review.filter === 'ignored' ? 'secondary' : 'outline'}
-            aria-pressed={review.filter === 'ignored'}
-            onClick={() => chooseFilter('ignored')}
-          >
-            除外のみ{' '}
-            <b>
-              {review.pending
-                ? '計算中'
-                : String((review.listingIgnoredTotal ?? 0).toLocaleString()) +
-                  '件'}
-            </b>
-          </Button>
+          <div className="review-filter-matrix-wrap">
+            <table
+              className="review-filter-matrix"
+              aria-label="サンプル候補の2×2分類と絞り込み"
+            >
+              <thead>
+                <tr>
+                  <th scope="col">比較群</th>
+                  <th scope="col">OK候補</th>
+                  <th scope="col">NG候補</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">{okRowLabel}</th>
+                  {renderCell(
+                    'ok-group-ok',
+                    'OK基準群のOK候補',
+                    matrixCounts?.okGroupOk ?? null,
+                  )}
+                  {renderCell(
+                    'false-positive',
+                    'OK基準群のNG候補',
+                    matrixCounts?.okGroupNg ?? null,
+                  )}
+                </tr>
+                <tr>
+                  <th scope="row">{otherRowLabel}</th>
+                  {renderCell(
+                    'false-negative',
+                    '反対群のOK候補',
+                    matrixCounts?.oppositeGroupOk ?? null,
+                  )}
+                  {renderCell(
+                    'opposite-group-ng',
+                    '反対群のNG候補',
+                    matrixCounts?.oppositeGroupNg ?? null,
+                  )}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="review-filter-matrix-note">
+            セルを選ぶと該当するサンプルに絞り込みます。未設定時は1%で仮設定します。
+          </p>
+          <div className="review-filter-utility-buttons">
+            <Button
+              variant={review.filter === 'all' ? 'secondary' : 'outline'}
+              aria-pressed={review.filter === 'all'}
+              onClick={() => chooseFilter('all')}
+            >
+              すべて{' '}
+              <b>
+                {review.pending
+                  ? '計算中'
+                  : (
+                      review.counts.all + review.ignoredInList.length
+                    ).toLocaleString()}
+                {review.pending ? '' : '件'}
+              </b>
+            </Button>
+            <Button
+              variant={review.filter === 'ignored' ? 'secondary' : 'outline'}
+              aria-pressed={review.filter === 'ignored'}
+              onClick={() => chooseFilter('ignored')}
+            >
+              除外のみ{' '}
+              <b>
+                {review.pending
+                  ? '計算中'
+                  : String((review.listingIgnoredTotal ?? 0).toLocaleString()) +
+                    '件'}
+              </b>
+            </Button>
+          </div>
         </fieldset>
         {searchControl}
       </div>
@@ -129,24 +178,22 @@ export function SampleReviewControls({
         className="review-filter-help candidate-semantics-note"
         role="note"
       >
-        候補はOK基準との不一致を示す参考分類で、真の誤判定とは確定しません。
+        4セルは群と仮しきい値による参考分類です。基準との不一致も、真の誤判定とは確定しません。
       </p>
       {review.filterError && (
         <p className="inline-error" role="alert">
           {review.filterError}
         </p>
       )}
-      {review.pending &&
-        (review.filter === 'false-positive' ||
-          review.filter === 'false-negative') && (
-          <div className="candidate-scope" aria-live="polite">
-            <p>候補件数を再計算中です。前の件数は確定値ではありません。</p>
-          </div>
-        )}
+      {review.pending && isClassificationFilter(review.filter) && (
+        <div className="candidate-scope" aria-live="polite">
+          <p>分類セルの件数を再計算中です。前の件数は確定値ではありません。</p>
+        </div>
+      )}
       {review.candidateScope && review.candidateScope.current > 0 && (
         <div className="candidate-scope" aria-live="polite">
           <p>
-            候補全体 <b>{review.candidateScope.total}</b>件中、現在の表示条件で{' '}
+            選択分類全体 <b>{review.candidateScope.total}</b>件中、現在の表示条件で{' '}
             <b>{review.candidateScope.current}</b>件表示。
           </p>
         </div>
@@ -154,11 +201,11 @@ export function SampleReviewControls({
       {review.candidateScope?.current === 0 && (
         <div className="candidate-scope" aria-live="polite">
           <p>
-            候補全体 <b>{review.candidateScope.total}</b>件中、現在の表示条件で{' '}
+            選択分類全体 <b>{review.candidateScope.total}</b>件中、現在の表示条件で{' '}
             <b>0</b>件表示。{' '}
             {review.candidateScope.total === 0
-              ? '比較対象全体にも候補がありません。'
-              : `全体の候補${review.candidateScope.total}件が、${
+              ? '比較対象全体にも選択分類がありません。'
+              : `全体の選択分類${review.candidateScope.total}件が、${
                   review.candidateScope.recovery === 'range'
                     ? '選択範囲の外にあります。'
                     : review.candidateScope.recovery === 'search'
@@ -177,10 +224,10 @@ export function SampleReviewControls({
               }}
             >
               {review.candidateScope.recovery === 'range'
-                ? '範囲を解除して候補を見る'
+                ? '範囲を解除して表示する'
                 : review.candidateScope.recovery === 'search'
-                  ? '名前検索を解除して候補を見る'
-                  : '範囲と名前検索を解除して候補を見る'}
+                  ? '名前検索を解除して表示する'
+                  : '範囲と名前検索を解除して表示する'}
             </Button>
           )}
         </div>
@@ -207,7 +254,7 @@ export function SampleReviewControls({
           <summary>フィルタの説明</summary>
           {review.counts.falsePositive === null && !review.pending && (
             <p>
-              未設定時に候補ボタンを押すと、現在のOK基準群とスコア方向を使って1%で仮設定して候補を表示します。
+              未設定時にマトリクスのセルを選ぶと、現在のOK基準群とスコア方向を使って1%で仮設定して表示します。
               実際の率は同点や件数で1%を下回る場合があります。
             </p>
           )}
@@ -303,10 +350,12 @@ export function SampleReviewControls({
 export function IgnoreSampleAction({
   sample,
   onIgnore,
+  onRestore,
   ignored,
 }: {
   sample: Sample;
   onIgnore: SampleReviewState['ignore'];
+  onRestore: (rowIndex: number) => void;
   ignored?: IgnoredSample;
 }) {
   const [reason, setReason] = useState('');
@@ -314,10 +363,17 @@ export function IgnoreSampleAction({
     return (
       <output className="excluded-sample-notice" aria-live="polite">
         <strong>集計から除外中</strong>
-        <p>理由：{ignored.reason}</p>
-        <p>
+        <span className="excluded-sample-description">理由：{ignored.reason}</span>
+        <span className="excluded-sample-description">
           一覧の「戻す」で復元できます。復元時は再集計し、しきい値を解除します。
-        </p>
+        </span>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => onRestore(sample.index)}
+        >
+          集計に戻す
+        </Button>
       </output>
     );
   return (

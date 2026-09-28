@@ -7,16 +7,20 @@ import {
   getPaginationRowModel,
   useReactTable,
   type ColumnDef,
+  type ColumnOrderState,
   type PaginationState,
   type Row,
   type SortingState,
+  type VisibilityState,
 } from '@tanstack/react-table';
 import {
   ArrowDown,
   ArrowDownUp,
   ArrowUp,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   FileAudio,
   StickyNote,
 } from 'lucide-react';
@@ -48,6 +52,23 @@ function sameSample(left: Sample, right: Sample): boolean {
     left.score === right.score &&
     left.group === right.group
   );
+}
+
+function normalizeColumnVisibility(
+  value: VisibilityState,
+  availableIds: readonly string[],
+): VisibilityState {
+  const stored =
+    value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const visibility = Object.fromEntries(
+    availableIds.map((id) => [id, stored[id] !== false]),
+  );
+  // The sample column contains the keyboard-accessible row selection control.
+  if (availableIds.includes('sample')) visibility.sample = true;
+  // Keep the table usable if a malformed saved preference hid every column.
+  if (availableIds.length && !Object.values(visibility).some(Boolean))
+    visibility[availableIds[0]] = true;
+  return visibility;
 }
 
 export function SampleTable({
@@ -227,6 +248,7 @@ export function SampleTable({
           ]
         : []),
       {
+        id: 'group',
         accessorKey: 'group',
         header: '比較群',
         cell: (ctx) => (
@@ -238,6 +260,7 @@ export function SampleTable({
         ),
       },
       {
+        id: 'score',
         accessorKey: 'score',
         header: scoreColumn,
         cell: (ctx) => (
@@ -339,11 +362,103 @@ export function SampleTable({
     onRestore,
     selected,
   ]);
+  const availableColumnIds = useMemo(
+    () => columns.map((column) => column.id ?? ''),
+    [columns],
+  );
+  const [storedColumnVisibility, setStoredColumnVisibility] =
+    useSessionState<VisibilityState>('tableColumnVisibility', {});
+  const [storedColumnOrder, setStoredColumnOrder] =
+    useSessionState<ColumnOrderState>('tableColumnOrder', []);
+  const effectiveColumnVisibility = useMemo(
+    () => normalizeColumnVisibility(storedColumnVisibility, availableColumnIds),
+    [storedColumnVisibility, availableColumnIds],
+  );
+  const effectiveColumnOrder = useMemo(() => {
+    const movable = availableColumnIds.filter((id) => id !== 'aggregation');
+    const available = new Set(movable);
+    const saved = Array.isArray(storedColumnOrder)
+      ? storedColumnOrder.filter(
+          (id): id is string => typeof id === 'string' && available.has(id),
+        )
+      : [];
+    const ordered = [...new Set([...saved, ...movable])];
+    return availableColumnIds.includes('aggregation')
+      ? [...ordered, 'aggregation']
+      : ordered;
+  }, [storedColumnOrder, availableColumnIds]);
+  function changeColumnVisibility(
+    updater: VisibilityState | ((previous: VisibilityState) => VisibilityState),
+  ) {
+    const current = normalizeColumnVisibility(
+      storedColumnVisibility,
+      availableColumnIds,
+    );
+    const next = typeof updater === 'function' ? updater(current) : updater;
+    const visibility = normalizeColumnVisibility(next, availableColumnIds);
+    const hidden = new Set(
+      availableColumnIds.filter(
+        (id) => current[id] !== false && visibility[id] === false,
+      ),
+    );
+    let nextSorting: SortingState | undefined;
+    if (effectiveSorting.some((sort) => hidden.has(sort.id))) {
+      const remaining = effectiveSorting.filter((sort) => !hidden.has(sort.id));
+      if (remaining.length) nextSorting = remaining;
+      else {
+        const fallback = columns.find(
+          (column) =>
+            column.id &&
+            !hidden.has(column.id) &&
+            visibility[column.id] !== false &&
+            column.enableSorting !== false,
+        );
+        nextSorting = fallback?.id ? [{ id: fallback.id, desc: false }] : [];
+      }
+    }
+    // Each update reads the controller's latest snapshot. Do not trigger the
+    // sorting update from inside the column-visibility updater: the controller
+    // applies functional updates against a captured snapshot and could overwrite
+    // the nested sort change with that older state.
+    if (nextSorting) setSorting(nextSorting);
+    setStoredColumnVisibility(visibility);
+  }
+  function changeColumnOrder(
+    updater: ColumnOrderState | ((previous: ColumnOrderState) => ColumnOrderState),
+  ) {
+    const movable = availableColumnIds.filter((id) => id !== 'aggregation');
+    const available = new Set(movable);
+    const current = Array.isArray(storedColumnOrder)
+      ? storedColumnOrder.filter(
+          (id): id is string => typeof id === 'string' && available.has(id),
+        )
+      : [];
+    const order = [...new Set([...current, ...movable])];
+    const next = typeof updater === 'function' ? updater(order) : updater;
+    const valid = Array.isArray(next)
+      ? next.filter(
+          (id): id is string => typeof id === 'string' && available.has(id),
+        )
+      : [];
+    const nextOrder = [...new Set([...valid, ...movable])];
+    setStoredColumnOrder(
+      availableColumnIds.includes('aggregation')
+        ? [...nextOrder, 'aggregation']
+        : nextOrder,
+    );
+  }
   const table = useReactTable({
     data: pageSamples,
     columns,
-    state: { sorting: effectiveSorting, pagination: displayPagination },
+    state: {
+      sorting: effectiveSorting,
+      pagination: displayPagination,
+      columnVisibility: effectiveColumnVisibility,
+      columnOrder: effectiveColumnOrder,
+    },
     onSortingChange: setSorting,
+    onColumnVisibilityChange: changeColumnVisibility,
+    onColumnOrderChange: changeColumnOrder,
     enableSortingRemoval: false,
     enableMultiRemove: false,
     onPaginationChange: setPagination,
@@ -366,6 +481,10 @@ export function SampleTable({
   const selectedTable = useReactTable({
     data: selectedData,
     columns,
+    state: {
+      columnVisibility: effectiveColumnVisibility,
+      columnOrder: effectiveColumnOrder,
+    },
     getRowId: (sample) => String(sample.index),
     getCoreRowModel: getCoreRowModel(),
   });
@@ -456,26 +575,104 @@ export function SampleTable({
         {row.getVisibleCells().map((cell) => (
           <TableCell
             key={cell.id}
+            data-column={cell.column.id}
             className={
               cell.column.id === 'aggregation' ? 'aggregation-cell' : undefined
             }
           >
-            {reference && cell.column.id === 'sample' && (
+            {reference &&
+              cell.column.id === table.getVisibleLeafColumns()[0]?.id && (
               <span className="selected-sample-status">
                 選択中
                 {selectedPosition < 0 && (
                   <span className="selection-outside-filter">絞り込み外</span>
                 )}
               </span>
-            )}
+              )}
             {flexRender(cell.column.columnDef.cell, cell.getContext())}
           </TableCell>
         ))}
       </TableRow>
     );
   }
+  const orderedColumns = table.getAllLeafColumns();
+  const visibleColumnCount = table.getVisibleLeafColumns().length;
+  function moveColumn(columnId: string, direction: -1 | 1) {
+    if (columnId === 'aggregation') return;
+    const current = orderedColumns.map((column) => column.id);
+    const from = current.indexOf(columnId);
+    const to = from + direction;
+    if (from < 0 || to < 0 || to >= current.length) return;
+    if (direction > 0 && current[to] === 'aggregation') return;
+    [current[from], current[to]] = [current[to], current[from]];
+    changeColumnOrder(current);
+  }
   return (
     <div className="samples-table" ref={tableRoot}>
+      <details className="table-column-controls">
+        <summary>
+          列の表示・順序
+          <span className="table-column-summary" aria-live="polite">
+            {visibleColumnCount}列表示
+          </span>
+        </summary>
+        <div className="table-column-settings">
+          <p>
+            列の表示を切り替え、上下ボタンで順序を変更できます。ファイル名列は選択操作のため常に表示し、集計列は右端に固定します。ソート中の列を隠すと、表示中の列で並べ替えます。
+          </p>
+          <ul aria-label="一覧の列設定">
+            {orderedColumns.map((column, index) => {
+              const header = column.columnDef.header;
+              const label = typeof header === 'string' ? header : column.id;
+              const visible = column.getIsVisible();
+              const lastVisible = visible && visibleColumnCount <= 1;
+              return (
+                <li key={column.id}>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={visible}
+                      disabled={column.id === 'sample' || lastVisible}
+                      aria-label={
+                        column.id === 'sample'
+                          ? `${label}列を常に表示`
+                          : `${label}列を表示`
+                      }
+                      onChange={column.getToggleVisibilityHandler()}
+                    />
+                    <span>{label}</span>
+                  </label>
+                  <span className="table-column-order-actions">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={`${label}列を上へ`}
+                      disabled={index === 0 || column.id === 'aggregation'}
+                      onClick={() => moveColumn(column.id, -1)}
+                    >
+                      <ChevronUp size={14} />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={`${label}列を下へ`}
+                      disabled={
+                        column.id === 'aggregation' ||
+                        index >= orderedColumns.length - 2
+                      }
+                      onClick={() => moveColumn(column.id, 1)}
+                    >
+                      <ChevronDown size={14} />
+                    </Button>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      </details>
       <Table
         containerAs="section"
         containerProps={{
@@ -506,6 +703,7 @@ export function SampleTable({
                 return (
                   <TableHead
                     key={h.id}
+                    data-column={h.column.id}
                     title={headerLabel}
                     aria-sort={
                       h.column.getCanSort()
@@ -571,12 +769,7 @@ export function SampleTable({
           </TableBody>
         )}
         <TableBody aria-label="一覧の表示ページ">
-          {table
-            .getRowModel()
-            .rows.filter(
-              (row) => !selectedReference || row.original.index !== selected,
-            )
-            .map((row) => renderRow(row))}
+          {table.getRowModel().rows.map((row) => renderRow(row))}
         </TableBody>
       </Table>
       {samples.length === 0 && (

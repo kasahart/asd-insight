@@ -74,6 +74,8 @@ function formatDecisionFilter(
 ): string {
   if (excludedOnly || decisionFilter === 'ignored') return '手動除外のみ';
   if (decisionFilter === 'false-positive') return 'OK基準群のNG候補';
+  if (decisionFilter === 'ok-group-ok') return 'OK基準群のOK候補';
+  if (decisionFilter === 'opposite-group-ng') return '反対群のNG候補';
   if (decisionFilter === 'false-negative') return '反対群のOK候補';
   return 'すべて';
 }

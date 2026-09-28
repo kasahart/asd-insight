@@ -235,6 +235,14 @@ test('分布上を相対位置でドラッグすると一覧の候補が絞り�
         : score >= lower && score < upper,
     ),
   ).toBe(true);
+
+  await page
+    .getByRole('button', { name: 'ヒストグラムの選択範囲を解除' })
+    .click();
+  await expect(page.locator('output.selection-status')).toContainText(
+    '一覧範囲：全スコア',
+  );
+  await expect.poll(() => listedCount(page), { timeout: 10_000 }).toBe(allCount);
 });
 
 test('一覧からサンプルを選ぶと詳細パネルと参照行が切り替わる', async ({

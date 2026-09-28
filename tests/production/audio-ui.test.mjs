@@ -277,8 +277,7 @@ test('audio failure stays local; retry keeps original media, note and settings',
   assert.equal(renderer.root.findAllByType('canvas').length, 1);
   assert.equal(renderer.root.findByType('audio').props.src, url);
 });
-test('missing audio explains the resolver evidence and opens its settings', async () => {
-  let opened = 0;
+test('missing audio explains the resolver evidence without a dead settings action', async () => {
   const renderer = await mount(
     tree(
       props(3, {
@@ -290,9 +289,6 @@ test('missing audio explains the resolver evidence and opens its settings', asyn
           source: 'audio-column',
           sourceColumn: 'audio_file',
         },
-        onOpenAudioSettings: () => {
-          opened++;
-        },
       }),
     ),
   );
@@ -301,9 +297,7 @@ test('missing audio explains the resolver evidence and opens its settings', asyn
   const settings = renderer.root
     .findAllByType('button')
     .find((node) => text(node) === '試聴音声の設定を開く');
-  assert.ok(settings);
-  await act(async () => settings.props.onClick());
-  assert.equal(opened, 1);
+  assert.equal(settings, undefined);
 });
 test('double-click axis settings retain valid/manual range and draft across new sample data', async () => {
   const initial = props();

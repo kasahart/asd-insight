@@ -117,7 +117,7 @@ test('分析の来歴とJSON/CSV/.ovlabの実ファイルを照合し、再取�
   const firstSample = page.getByRole('button', {
     name: 'sample-001.wav を選択',
     exact: true,
-  });
+  }).first();
   await firstSample.click();
   await expect(
     page.getByRole('complementary', { name: '選択サンプルの詳細' }),
@@ -236,6 +236,7 @@ test('分析の来歴とJSON/CSV/.ovlabの実ファイルを照合し、再取�
     { timeout: 30_000 },
   );
   await page
+    .getByRole('rowgroup', { name: '一覧の表示ページ' })
     .getByRole('button', {
       name: 'sample-001.wav を一覧から集計に戻す',
       exact: true,

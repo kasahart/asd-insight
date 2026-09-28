@@ -19,6 +19,15 @@ function sample(index, score, group) {
   };
 }
 const ids = (samples) => samples.map((s) => s.index);
+const assertReviewCounts = (actual, expected) =>
+  assert.deepEqual(
+    {
+      all: actual.all,
+      falsePositive: actual.falsePositive,
+      falseNegative: actual.falseNegative,
+    },
+    expected,
+  );
 const reference = (operator, direction = 'high', okGroup = 'A') => ({
   okGroup,
   rule: { threshold: 0, operator, direction },
@@ -139,12 +148,63 @@ test('all four operators give the correct FP/FN candidates at equality', () => {
       ids(filterReviewSamples(labeled, 'false-negative', ref)),
       fn,
     );
-    assert.deepEqual(reviewCounts(labeled, ref), {
+    assertReviewCounts(reviewCounts(labeled, ref), {
       all: 6,
       falsePositive: fp.length,
       falseNegative: fn.length,
     });
   }
+});
+
+test('the complete review matrix classifies all four cells and follows the selected OK group', () => {
+  const refA = reference('gt', 'high', 'A');
+  assert.deepEqual(
+    ids(filterReviewSamples(labeled, 'ok-group-ok', refA)),
+    [0, 1],
+  );
+  assert.deepEqual(
+    ids(filterReviewSamples(labeled, 'false-positive', refA)),
+    [2],
+  );
+  assert.deepEqual(
+    ids(filterReviewSamples(labeled, 'false-negative', refA)),
+    [3, 4],
+  );
+  assert.deepEqual(
+    ids(filterReviewSamples(labeled, 'opposite-group-ng', refA)),
+    [5],
+  );
+  assert.deepEqual(reviewCounts(labeled, refA), {
+    all: 6,
+    falsePositive: 1,
+    falseNegative: 2,
+    matrix: {
+      okGroupNg: 1,
+      okGroupOk: 2,
+      oppositeGroupNg: 1,
+      oppositeGroupOk: 2,
+    },
+  });
+
+  const refB = reference('gt', 'high', 'B');
+  assert.deepEqual(
+    ids(filterReviewSamples(labeled, 'ok-group-ok', refB)),
+    [3, 4],
+  );
+  assert.deepEqual(
+    ids(filterReviewSamples(labeled, 'opposite-group-ng', refB)),
+    [2],
+  );
+  assert.deepEqual(
+    candidateScope(
+      labeled,
+      'ok-group-ok',
+      refA,
+      (s) => s.index === 0,
+      () => true,
+    ),
+    { total: 2, inRange: 1, current: 1, recovery: null },
+  );
 });
 
 test('reference OK can be group B for either score direction', () => {
@@ -157,7 +217,7 @@ test('reference OK can be group B for either score direction', () => {
     ids(filterReviewSamples(labeled, 'false-negative', high)),
     [0, 1],
   );
-  assert.deepEqual(reviewCounts(labeled, high), {
+  assertReviewCounts(reviewCounts(labeled, high), {
     all: 6,
     falsePositive: 1,
     falseNegative: 2,
@@ -187,7 +247,7 @@ test('boundary ties remain together and do not depend on row order', () => {
     ['lte', 'low', 2, 0],
   ]) {
     const ref = reference(operator, direction);
-    assert.deepEqual(reviewCounts(tied, ref), {
+    assertReviewCounts(reviewCounts(tied, ref), {
       all: 4,
       falsePositive: fp,
       falseNegative: fn,
@@ -209,7 +269,7 @@ test('an unavailable threshold leaves all rows accessible but candidates and cou
   assert.notEqual(all, labeled);
   assert.deepEqual(filterReviewSamples(labeled, 'false-positive', null), []);
   assert.deepEqual(filterReviewSamples(labeled, 'false-negative', null), []);
-  assert.deepEqual(reviewCounts(labeled, null), {
+  assertReviewCounts(reviewCounts(labeled, null), {
     all: 6,
     falsePositive: null,
     falseNegative: null,
@@ -235,7 +295,7 @@ test('non-finite scores are never FP or FN candidates, including non-detected Na
     [1],
   );
   assert.equal(filterReviewSamples(samples, 'all', ref).length, 6);
-  assert.deepEqual(reviewCounts(samples, ref), {
+  assertReviewCounts(reviewCounts(samples, ref), {
     all: 6,
     falsePositive: 1,
     falseNegative: 1,
@@ -243,12 +303,12 @@ test('non-finite scores are never FP or FN candidates, including non-detected Na
 });
 
 test('empty candidate lists are zero with a rule, distinct from unavailable without one', () => {
-  assert.deepEqual(reviewCounts([], reference('gt')), {
+  assertReviewCounts(reviewCounts([], reference('gt')), {
     all: 0,
     falsePositive: 0,
     falseNegative: 0,
   });
-  assert.deepEqual(reviewCounts([], null), {
+  assertReviewCounts(reviewCounts([], null), {
     all: 0,
     falsePositive: null,
     falseNegative: null,
@@ -465,7 +525,7 @@ test('candidate review uses the retained rows and reversible exclusion does not 
     [8],
   );
   const excluded = partition(new Set([7]));
-  assert.deepEqual(reviewCounts(excluded.samples, ref), {
+  assertReviewCounts(reviewCounts(excluded.samples, ref), {
     all: 3,
     falsePositive: 0,
     falseNegative: 1,
@@ -503,7 +563,7 @@ test('listing interleaves ignored rows in source order without adding them to ac
   assert.deepEqual(ids(result.included), [3, 12, 8]);
   assert.deepEqual(ids(result.listed), [40, 3, 91, 12, 77, 8]);
   assert.deepEqual(ids(result.ignored), [40, 91, 77]);
-  assert.deepEqual(result.counts, {
+  assertReviewCounts(result.counts, {
     all: 3,
     falsePositive: 1,
     falseNegative: 1,
@@ -530,7 +590,7 @@ test('FP and FN filters always retain ignored rows but never count them as candi
     assert.deepEqual(ids(result.included), included);
     assert.deepEqual(ids(result.listed), listed);
     assert.deepEqual(ids(result.ignored), [40, 91, 77]);
-    assert.deepEqual(result.counts, {
+    assertReviewCounts(result.counts, {
       all: 3,
       falsePositive: 1,
       falseNegative: 1,
@@ -547,7 +607,7 @@ test('an unavailable threshold does not prevent finding ignored rows to restore'
       ids(result.listed),
       filter === 'all' ? [40, 3, 91, 12, 77, 8] : [40, 91, 77],
     );
-    assert.deepEqual(result.counts, {
+    assertReviewCounts(result.counts, {
       all: 3,
       falsePositive: null,
       falseNegative: null,
@@ -563,7 +623,7 @@ test('excluding every scoped row keeps the whole list restorable with no active 
       assert.deepEqual(result.included, []);
       assert.deepEqual(result.listed, listingSamples);
       assert.deepEqual(result.ignored, listingSamples);
-      assert.deepEqual(result.counts, {
+      assertReviewCounts(result.counts, {
         all: 0,
         falsePositive: ref ? 0 : null,
         falseNegative: ref ? 0 : null,
@@ -584,7 +644,7 @@ test('restored rows obey the current candidate filter again and full restoration
   );
   assert.deepEqual(ids(result.included), [40, 8]);
   assert.deepEqual(ids(result.listed), [40, 91, 77, 8]);
-  assert.deepEqual(result.counts, {
+  assertReviewCounts(result.counts, {
     all: 4,
     falsePositive: 2,
     falseNegative: 1,
@@ -592,7 +652,7 @@ test('restored rows obey the current candidate filter again and full restoration
   ignored.delete(91); // Restored true negative no longer bypasses the FP filter.
   result = buildReviewListing(listingSamples, ignored, 'false-positive', ref);
   assert.deepEqual(ids(result.listed), [40, 77, 8]);
-  assert.deepEqual(result.counts, {
+  assertReviewCounts(result.counts, {
     all: 5,
     falsePositive: 2,
     falseNegative: 1,
@@ -602,7 +662,7 @@ test('restored rows obey the current candidate filter again and full restoration
   assert.deepEqual(result.included, listingSamples);
   assert.deepEqual(result.listed, listingSamples);
   assert.deepEqual(result.ignored, []);
-  assert.deepEqual(result.counts, {
+  assertReviewCounts(result.counts, {
     all: 6,
     falsePositive: 2,
     falseNegative: 2,
@@ -615,7 +675,7 @@ test('ignored and restored rows outside the supplied scope are not injected into
   const before = buildReviewListing(scoped, ignored, 'all', reference('gt'));
   assert.deepEqual(ids(before.listed), [12, 77, 8]);
   assert.deepEqual(ids(before.ignored), [77]);
-  assert.deepEqual(before.counts, {
+  assertReviewCounts(before.counts, {
     all: 2,
     falsePositive: 1,
     falseNegative: 0,
@@ -629,7 +689,17 @@ test('ignored and restored rows outside the supplied scope are not injected into
     included: [],
     listed: [],
     ignored: [],
-    counts: { all: 0, falsePositive: 0, falseNegative: 0 },
+    counts: {
+      all: 0,
+      falsePositive: 0,
+      falseNegative: 0,
+      matrix: {
+        okGroupNg: 0,
+        okGroupOk: 0,
+        oppositeGroupNg: 0,
+        oppositeGroupOk: 0,
+      },
+    },
   });
 });
 
@@ -649,7 +719,7 @@ test('listing preserves input references and never mutates source arrays, ignore
   const result = buildReviewListing(samples, ignored, 'false-positive', ref);
   assert.deepEqual(ids(result.included), [3]);
   assert.deepEqual(ids(result.listed), [40, 3, 77]);
-  assert.deepEqual(result.counts, {
+  assertReviewCounts(result.counts, {
     all: 4,
     falsePositive: 1,
     falseNegative: 1,
@@ -692,7 +762,7 @@ test('showing ignored samples cannot put them back into PR-AUC or threshold cali
   assert.deepEqual(ids(result.listed), [0, 1, 2, 3]);
   assert.deepEqual(ids(result.included), [1, 2, 3]);
   assert.deepEqual(ids(result.included), ids(active.samples));
-  assert.deepEqual(result.counts, {
+  assertReviewCounts(result.counts, {
     all: 3,
     falsePositive: 0,
     falseNegative: 0,
@@ -756,7 +826,7 @@ void test('ignored-only listings work without calibration and preserve source ro
   assert.deepEqual(ids(result.listed), [40, 91, 77]);
   assert.deepEqual(ids(result.ignored), [40, 91, 77]);
   assert.deepEqual(result.included, []);
-  assert.deepEqual(result.counts, {
+  assertReviewCounts(result.counts, {
     all: 3,
     falsePositive: null,
     falseNegative: null,

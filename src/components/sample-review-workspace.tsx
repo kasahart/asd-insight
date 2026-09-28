@@ -31,6 +31,7 @@ import {
 import {
   derivedPopulationSignature,
   evaluationPopulationKey,
+  isClassificationFilter,
   type CandidateScope,
   type ReviewCounts,
   type ReviewFilter,
@@ -543,7 +544,7 @@ export function SampleReviewWorkspace({
   };
   function setFilter(next: ReviewFilter) {
     try {
-      if (next === 'false-positive' || next === 'false-negative') {
+      if (isClassificationFilter(next)) {
         if (!selection) {
           installRate(1);
           setTargetPercent('1');
@@ -656,6 +657,7 @@ export function SampleReviewWorkspace({
             all: 0,
             falsePositive: null,
             falseNegative: null,
+            matrix: null,
           },
     candidateScope: !pending ? (result?.listing.candidateScope ?? null) : null,
     ignored,

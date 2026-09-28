@@ -63,7 +63,6 @@ export function AudioInspector({
   note,
   onNote,
   onAnalysis,
-  onOpenAudioSettings,
   reviewAction,
   excluded = false,
   inCurrentList = true,
@@ -89,7 +88,6 @@ export function AudioInspector({
       | 'sourceHash'
     >,
   ) => void;
-  onOpenAudioSettings?: () => void;
   reviewAction?: ReactNode;
   excluded?: boolean;
   inCurrentList?: boolean;
@@ -284,11 +282,6 @@ export function AudioInspector({
           <FileAudio size={23} />
           <p>対応する音声がありません</p>
           <small>{audioResolutionMessage(audioResolution)}</small>
-          {onOpenAudioSettings && (
-            <Button variant="outline" size="sm" onClick={onOpenAudioSettings}>
-              試聴音声の設定を開く
-            </Button>
-          )}
         </div>
       )}
       {error && (

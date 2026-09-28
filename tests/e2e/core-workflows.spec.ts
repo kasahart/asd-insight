@@ -148,6 +148,12 @@ test('仮しきい値からOK基準群のNG候補・反対群のOK候補と一�
 }) => {
   await openDemo(page);
 
+  const matrix = page.getByRole('table', {
+    name: 'サンプル候補の2×2分類と絞り込み',
+  });
+  await expect(matrix).toBeVisible();
+  await expect(matrix.locator('tbody tr')).toHaveCount(2);
+
   await expect(
     page.getByRole('button', { name: /^OK基準群のNG候補/ }),
   ).toContainText('未設定時は1%で仮設定');
@@ -169,6 +175,11 @@ test('仮しきい値からOK基準群のNG候補・反対群のOK候補と一�
   await expect(
     thresholdPanel.getByRole('heading', { name: '仮しきい値による候補分類' }),
   ).toBeVisible();
+  await expect(
+    thresholdPanel.getByRole('table', {
+      name: '仮しきい値の2×2候補分類',
+    }),
+  ).toBeVisible();
   await expect(page.locator('.listing-scope-summary')).toContainText(
     '計算対象全体',
   );
@@ -189,13 +200,27 @@ test('仮しきい値からOK基準群のNG候補・反対群のOK候補と一�
   await falsePositive.click();
   await expect(falsePositive).toHaveAttribute('aria-pressed', 'true');
   await expect(falseNegative).toHaveAttribute('aria-pressed', 'false');
-  await expect(page.locator('.candidate-scope')).toContainText('候補全体');
+  await expect(page.locator('.candidate-scope')).toContainText(
+    '選択分類全体',
+  );
   await expect.poll(() => listedCount(page)).toBe(falsePositiveCount);
 
   await falseNegative.click();
   await expect(falsePositive).toHaveAttribute('aria-pressed', 'false');
   await expect(falseNegative).toHaveAttribute('aria-pressed', 'true');
   await expect.poll(() => listedCount(page)).toBe(falseNegativeCount);
+
+  for (const name of [
+    'OK基準群のOK候補',
+    '反対群のNG候補',
+  ] as const) {
+    const button = page.getByRole('button', { name: new RegExp(`^${name}`) });
+    await expect(button).toContainText(/\d+件/);
+    const count = await buttonCount(button);
+    await button.click();
+    await expect(button).toHaveAttribute('aria-pressed', 'true');
+    await expect.poll(() => listedCount(page)).toBe(count);
+  }
 });
 
 test('一覧ヘッダーのセル全体で昇順・降順を切り替え、aria-sortと値順が一致する', async ({
@@ -271,8 +296,8 @@ test('サンプルを除外し、除外のみから同じサンプルを復活�
   await ignoredOnly.click();
   await expect(ignoredOnly).toHaveAttribute('aria-pressed', 'true');
   await expect.poll(() => listedCount(page)).toBe(1);
-  const restore = page.getByRole('button', {
-    name: `${sampleId} を一覧から集計に戻す`,
+  const restore = inspector.getByRole('button', {
+    name: '集計に戻す',
     exact: true,
   });
   await expect(restore).toBeVisible();
@@ -286,6 +311,12 @@ test('サンプルを除外し、除外のみから同じサンプルを復活�
       exact: true,
     }),
   ).toHaveCount(0);
+  await expect(
+    inspector.getByRole('button', {
+      name: 'このサンプルを集計から除外',
+      exact: true,
+    }),
+  ).toBeVisible();
 
   const all = page.getByRole('button', { name: /^すべて/ });
   await all.click();
@@ -312,7 +343,9 @@ test('サンプル名検索とページ送りが一覧件数に反映される',
   await query.fill(sampleId!);
   await expect.poll(() => listedCount(page)).toBe(1);
   await expect(
-    page.getByRole('button', { name: `${sampleId} を選択`, exact: true }),
+    page
+      .getByRole('rowgroup', { name: '一覧の表示ページ' })
+      .getByRole('button', { name: `${sampleId} を選択`, exact: true }),
   ).toBeVisible();
 
   await query.fill('');

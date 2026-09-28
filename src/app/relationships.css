@@ -1348,6 +1348,195 @@
   font-size: 13px;
 }
 
+/* The candidate picker and threshold summary share the same two-by-two axes. */
+.review-filter-buttons {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.review-filter-matrix-wrap,
+.threshold-classification-matrix-wrap {
+  min-width: 0;
+  overflow-x: auto;
+}
+.review-filter-matrix,
+.threshold-classification-matrix {
+  width: 100%;
+  min-width: 480px;
+  border-collapse: separate;
+  border-spacing: 4px;
+  font-size: 12px;
+}
+.review-filter-matrix th,
+.threshold-classification-matrix th {
+  padding: 5px 7px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.45;
+  text-align: left;
+  vertical-align: bottom;
+  overflow-wrap: anywhere;
+}
+.review-filter-matrix th:first-child,
+.threshold-classification-matrix th:first-child {
+  width: 30%;
+}
+.review-filter-matrix tbody th,
+.threshold-classification-matrix tbody th {
+  color: var(--foreground);
+  vertical-align: middle;
+}
+.review-filter-matrix tbody th small,
+.threshold-classification-matrix tbody th small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted-foreground);
+  font-size: 10px;
+  font-weight: 400;
+}
+.review-filter-matrix td,
+.threshold-classification-matrix td {
+  width: 35%;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--muted);
+  vertical-align: middle;
+}
+.review-filter-matrix td[data-candidate-cell='true'] {
+  border-color: color-mix(in srgb, var(--threshold-color) 42%, var(--border));
+  background: color-mix(in srgb, var(--threshold-color) 7%, var(--card));
+}
+.review-filter-matrix .candidate-filter-cell {
+  display: grid;
+  width: 100%;
+  min-height: 64px;
+  height: auto;
+  justify-items: start;
+  gap: 3px;
+  padding: 8px 9px;
+  white-space: normal;
+  text-align: left;
+  line-height: 1.4;
+}
+.review-filter-matrix .candidate-filter-cell > span {
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.review-filter-matrix .candidate-filter-cell > b {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.review-filter-matrix .candidate-filter-cell > small {
+  color: var(--muted-foreground);
+  font-size: 10px;
+  font-weight: 400;
+}
+.review-filter-matrix .candidate-filter-cell[aria-pressed='true'] > small {
+  color: inherit;
+}
+.review-filter-utility-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.review-filter-matrix-note {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.threshold-classification-matrix {
+  min-width: 0;
+  margin-top: 8px;
+  border-spacing: 3px;
+  table-layout: fixed;
+}
+.threshold-classification-matrix th {
+  padding-inline: 7px;
+}
+.threshold-classification-matrix td {
+  padding: 9px;
+  color: var(--foreground);
+  font-variant-numeric: tabular-nums;
+}
+.threshold-classification-matrix td strong,
+.threshold-classification-matrix td small {
+  display: block;
+}
+.threshold-classification-matrix td strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+.threshold-classification-matrix td small {
+  margin-top: 4px;
+  color: var(--muted-foreground);
+  font-size: 10px;
+  line-height: 1.45;
+}
+.threshold-classification-matrix td[data-classification='ok-group-ng'],
+.threshold-classification-matrix td[data-classification='opposite-group-ok'] {
+  border-color: color-mix(in srgb, var(--threshold-color) 42%, var(--border));
+  background: color-mix(in srgb, var(--threshold-color) 7%, var(--card));
+}
+.inspector-content .threshold-classification-matrix-wrap {
+  overflow: visible;
+}
+.inspector-content .threshold-classification-matrix {
+  width: 100%;
+  min-width: 0;
+  border-spacing: 2px;
+  font-size: 9px;
+}
+.inspector-content .threshold-classification-matrix th {
+  padding: 3px 2px;
+  font-size: 9px;
+}
+.inspector-content .threshold-classification-matrix th:first-child {
+  width: 30%;
+}
+.inspector-content .threshold-classification-matrix td {
+  padding: 4px 3px;
+  overflow-wrap: anywhere;
+  font-size: 9px;
+}
+.inspector-content .threshold-classification-matrix td strong,
+.inspector-content .threshold-classification-matrix td small {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+.inspector-content .threshold-classification-matrix td strong {
+  font-size: 9px;
+}
+.inspector-content .threshold-classification-matrix td small {
+  font-size: 8px;
+}
+.distribution-range-active-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-bottom: 8px;
+  padding: 7px 9px;
+  border: 1px solid var(--range-selection-color);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--range-selection-color) 8%, var(--card));
+  color: var(--foreground);
+  font-size: 11px;
+}
+.distribution-range-active-notice > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.distribution-range-active-notice button {
+  flex: 0 0 auto;
+  height: 28px;
+  padding-inline: 8px;
+  font-size: 11px;
+}
+
 @media (max-width: 680px) {
   .page-heading {
     grid-template-columns: minmax(0, 1fr);
