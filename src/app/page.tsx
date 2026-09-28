@@ -27,6 +27,7 @@ import {
 import { ContextWorkbench } from '@/components/context-workbench';
 import { EvaluationSettings } from '@/components/evaluation-settings';
 import { addAudioAttachments } from '@/lib/audio-attachments';
+import { readWavDirectory } from '@/lib/read-wav-directory';
 import { LIMITS } from '@storage/validation';
 import {
   MAX_FOLDER_LEVELS,
@@ -607,6 +608,9 @@ function DiagnosticsWorkspace() {
     text: string;
   } | null>(null);
   const folderInput = useRef<HTMLInputElement>(null);
+  const audioImportRequest = useRef(0);
+  const audioDragDepth = useRef(0);
+  const [audioDragging, setAudioDragging] = useState(false);
   const [pendingAudio, setPendingAudio] = useState<{
     incoming: File[];
     files: Map<string, File>;
@@ -873,8 +877,16 @@ function DiagnosticsWorkspace() {
       else setGroup({ kind: 'category', column: '', a: '', b: '' });
     }
   }
-  function previewAudio(files: FileList) {
-    setPendingAudio(null);
+  function beginAudioImport(clearPreview = true) {
+    const request = ++audioImportRequest.current;
+    if (clearPreview) {
+      setPendingAudio(null);
+      setMessage(null);
+    }
+    return request;
+  }
+  function previewAudio(files: Iterable<File>, request: number) {
+    if (request !== audioImportRequest.current) return;
     if (!audioColumn && !idColumn) {
       setMessage({
         error: true,
@@ -934,6 +946,89 @@ function DiagnosticsWorkspace() {
       changed,
     });
     setMessage(null);
+  }
+  async function chooseAudioFolder() {
+    const request = beginAudioImport(false);
+    const picker = (
+      window as Window & {
+        showDirectoryPicker?: (options: {
+          mode: 'read';
+        }) => Promise<FileSystemDirectoryHandle>;
+      }
+    ).showDirectoryPicker;
+    if (!picker) {
+      folderInput.current?.click();
+      return;
+    }
+    try {
+      const directory = await picker.call(window, { mode: 'read' });
+      if (request !== audioImportRequest.current) return;
+      setPendingAudio(null);
+      setMessage(null);
+      const files = await readWavDirectory(directory, LIMITS.assetCount);
+      previewAudio(files, request);
+    } catch (error) {
+      if (request !== audioImportRequest.current) return;
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      setPendingAudio(null);
+      setMessage({
+        error: true,
+        text: error instanceof Error ? error.message : 'WAVフォルダを開けませんでした。',
+      });
+    }
+  }
+  function dropAudioFolder(event: React.DragEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    const request = beginAudioImport();
+    audioDragDepth.current = 0;
+    setAudioDragging(false);
+    // Chrome requires getAsFileSystemHandle to be called during the drop event.
+    const items = Array.from(event.dataTransfer.items).filter(
+      (item) => item.kind === 'file',
+    );
+    const unsupported = items.some(
+      (item) =>
+        typeof (
+          item as DataTransferItem & {
+            getAsFileSystemHandle?: () => Promise<FileSystemHandle | null>;
+          }
+        ).getAsFileSystemHandle !== 'function',
+    );
+    const handles = items.map((item) => {
+      const getHandle = (
+        item as DataTransferItem & {
+          getAsFileSystemHandle?: () => Promise<FileSystemHandle | null>;
+        }
+      ).getAsFileSystemHandle;
+      return getHandle ? getHandle.call(item) : Promise.resolve(null);
+    });
+    void (async () => {
+      try {
+        if (unsupported)
+          throw new Error(
+            'このブラウザーではフォルダのドロップに対応していません。「WAVフォルダを選択」を使ってください。',
+          );
+        const directories = (await Promise.all(handles)).filter(
+          (handle): handle is FileSystemDirectoryHandle =>
+            handle?.kind === 'directory',
+        );
+        if (request !== audioImportRequest.current) return;
+        if (directories.length !== 1 || items.length !== 1)
+          throw new Error('WAVフォルダを1つドロップしてください。');
+        const files = await readWavDirectory(directories[0], LIMITS.assetCount);
+        previewAudio(files, request);
+      } catch (error) {
+        if (request !== audioImportRequest.current) return;
+        setPendingAudio(null);
+        setMessage({
+          error: true,
+          text:
+            error instanceof Error
+              ? error.message
+              : 'WAVフォルダを開けませんでした。',
+        });
+      }
+    })();
   }
   function attachAudio() {
     if (!pendingAudio) return;
@@ -1066,7 +1161,8 @@ function DiagnosticsWorkspace() {
         multiple
         hidden
         onChange={(e) => {
-          if (e.target.files) previewAudio(e.target.files);
+          if (e.target.files)
+            previewAudio(e.target.files, beginAudioImport());
           e.target.value = '';
         }}
       />
@@ -1366,12 +1462,42 @@ function DiagnosticsWorkspace() {
                       {!data.demo && (
                         <Button
                           variant="outline"
-                          onClick={() => folderInput.current?.click()}
+                          onClick={() => void chooseAudioFolder()}
                         >
                           WAVフォルダを選択
                         </Button>
                       )}
                     </div>
+                    {!data.demo && (
+                      <button
+                        type="button"
+                        className="audio-folder-drop-zone"
+                        data-dragging={audioDragging}
+                        aria-label="WAVフォルダのドロップ領域"
+                        onClick={() => void chooseAudioFolder()}
+                        onDragEnter={(event) => {
+                          event.preventDefault();
+                          audioDragDepth.current += 1;
+                          setAudioDragging(true);
+                        }}
+                        onDragLeave={(event) => {
+                          event.preventDefault();
+                          audioDragDepth.current = Math.max(
+                            0,
+                            audioDragDepth.current - 1,
+                          );
+                          if (audioDragDepth.current === 0)
+                            setAudioDragging(false);
+                        }}
+                        onDragOver={(event) => {
+                          event.preventDefault();
+                          event.dataTransfer.dropEffect = 'copy';
+                        }}
+                        onDrop={dropAudioFolder}
+                      >
+                        WAVフォルダをここにドラッグ＆ドロップ
+                      </button>
+                    )}
                     {pendingAudio && previewAudit && (
                       <section
                         className="audio-import-preview"
@@ -1471,7 +1597,7 @@ function DiagnosticsWorkspace() {
                       </section>
                     )}
                     <p>
-                      試聴・スペクトログラム用です。音声なしでも分布を比較できます。
+                      ブラウザーがフォルダの読み取りを確認します。音声は端末内で処理し、サーバーへ送信しません。音声なしでも分布を比較できます。
                     </p>
                   </PersistentDetails>
                 </aside>
