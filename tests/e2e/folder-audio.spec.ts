@@ -6,9 +6,11 @@ import { Buffer } from 'node:buffer';
 
 test('フォルダ読み取りAPIで相対パスを保持してWAVを取り込む', async ({ page }) => {
   await page.addInitScript(() => {
+    let pickerCalls = 0;
     Object.defineProperty(window, 'showDirectoryPicker', {
       configurable: true,
       value: async (options: { mode: string }) => {
+        if (++pickerCalls === 2) throw new DOMException('Canceled', 'AbortError');
         document.documentElement.dataset.pickerMode = options.mode;
         const wav = {
           kind: 'file',
@@ -66,6 +68,8 @@ test('フォルダ読み取りAPIで相対パスを保持してWAVを取り込�
   await expect(page.getByRole('region', { name: 'WAVフォルダ階層' })).toContainText(
     '正常',
   );
+  await page.getByRole('button', { name: 'WAVフォルダを選択' }).click();
+  await expect(preview).toContainText('対応 1行、未対応 1行');
 });
 
 test('ドロップしたWAVフォルダを読み取り、取り込み前に対応を確認できる', async ({ page }) => {

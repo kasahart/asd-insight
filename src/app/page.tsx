@@ -877,10 +877,12 @@ function DiagnosticsWorkspace() {
       else setGroup({ kind: 'category', column: '', a: '', b: '' });
     }
   }
-  function beginAudioImport() {
+  function beginAudioImport(clearPreview = true) {
     const request = ++audioImportRequest.current;
-    setPendingAudio(null);
-    setMessage(null);
+    if (clearPreview) {
+      setPendingAudio(null);
+      setMessage(null);
+    }
     return request;
   }
   function previewAudio(files: Iterable<File>, request: number) {
@@ -946,7 +948,7 @@ function DiagnosticsWorkspace() {
     setMessage(null);
   }
   async function chooseAudioFolder() {
-    const request = beginAudioImport();
+    const request = beginAudioImport(false);
     const picker = (
       window as Window & {
         showDirectoryPicker?: (options: {
@@ -960,6 +962,9 @@ function DiagnosticsWorkspace() {
     }
     try {
       const directory = await picker.call(window, { mode: 'read' });
+      if (request !== audioImportRequest.current) return;
+      setPendingAudio(null);
+      setMessage(null);
       const files = await readWavDirectory(directory, LIMITS.assetCount);
       previewAudio(files, request);
     } catch (error) {
