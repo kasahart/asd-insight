@@ -28,7 +28,7 @@ function naturalOrder(a: Token[], b: Token[]): number {
 export function sortReviewSamples(
   samples: readonly Sample[],
   sort?: EvaluationListSort,
-  idColumn?: string,
+  audioColumn?: string,
 ): readonly Sample[] {
   if (!sort) return samples;
   const builtin = sort.source !== 'row';
@@ -40,16 +40,22 @@ export function sortReviewSamples(
         ? 'text'
         : 'alphanumeric');
   const entries = samples.map((sample) => {
+    const sourceValue = audioColumn ? (sample.row[audioColumn] ?? '') : '';
+    const normalized = sourceValue.replaceAll('\\', '/');
+    const sourceFilename =
+      audioColumn && sourceValue.trim()
+        ? normalized.split('/').at(-1) || `行${sample.index + 1}`
+        : `行${sample.index + 1}`;
     const raw =
       builtin && sort.column === '__score'
         ? sample.score
         : builtin && sort.column === '__group'
           ? sample.group
           : builtin && sort.column === '__sample'
-            ? idColumn
-              ? sample.row[idColumn]
-              : `row-${sample.index + 1}`
-            : sample.row[sort.column];
+            ? sourceFilename
+            : builtin && sort.column === '__path'
+              ? sourceValue
+              : sample.row[sort.column];
     const value =
       kind === 'number' ? finiteNumber(String(raw)) : String(raw).toLowerCase();
     return {

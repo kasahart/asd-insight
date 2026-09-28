@@ -377,7 +377,7 @@ test('audio matches local files only; score aggregation does not require audio',
   assert.equal(findAudio({ id: 'clip' }, 0, 'id', '', files), wav);
   assert.equal(
     findAudio({ audio: 'C:\\audio\\clip.wav' }, 0, '', 'audio', files),
-    wav,
+    undefined,
   );
   assert.equal(
     findAudio({ audio: 'absent.wav' }, 0, '', 'audio', files),

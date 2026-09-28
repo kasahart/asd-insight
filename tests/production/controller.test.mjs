@@ -142,6 +142,60 @@ function completeState() {
 }
 const columns = ['sample_id', 'score', 'score2', 'group'];
 
+test('saved folder conditions require a recorded detected level', () => {
+  const value = state();
+  value.rowCount = 2;
+  value.group = {
+    kind: 'category',
+    column: 'WAVフォルダ階層1',
+    a: '正常',
+    b: '要確認',
+  };
+  assert.throws(() => validateApplicationState(value, 2, columns));
+  value.adoptedFolderLevels = [1];
+  value.filterColumn = 'WAVフォルダ階層1';
+  validateApplicationState(value, 2, columns);
+  value.adoptedFolderLevels = [1, 1];
+  assert.throws(() => validateApplicationState(value, 2, columns));
+});
+
+test('saved folder conditions must also exist in the attached WAV paths', () => {
+  const value = state();
+  value.group = {
+    kind: 'category',
+    column: 'WAVフォルダ階層1',
+    a: '正常',
+    b: '要確認',
+  };
+  value.adoptedFolderLevels = [1];
+  validateApplicationState(value, 1, columns, ['正常/設備A/001.wav']);
+  assert.throws(
+    () => validateApplicationState(value, 1, columns, ['001.wav']),
+    /group/,
+  );
+
+  value.group = { kind: 'category', column: 'group', a: 'A', b: 'B' };
+  value.filterColumn = 'WAVフォルダ階層1';
+  value.filterValue = '正常';
+  assert.throws(
+    () => validateApplicationState(value, 1, columns, ['001.wav']),
+    /filterColumn/,
+  );
+});
+
+test('inspection sorting accepts path and dataset attributes, including folder levels', () => {
+  const value = state();
+  value.tableSorting = [{ id: 'relative-path', desc: false }];
+  validateApplicationState(value, 1, columns);
+  value.tableSorting = [{ id: 'data:sample_id', desc: true }];
+  validateApplicationState(value, 1, columns);
+  value.adoptedFolderLevels = [1];
+  value.tableSorting = [{ id: 'data:WAVフォルダ階層1', desc: false }];
+  validateApplicationState(value, 1, columns);
+  value.tableSorting = [{ id: 'data:missing', desc: false }];
+  assert.throws(() => validateApplicationState(value, 1, columns));
+});
+
 test('complete schema accepts deliberate string drafts, retained zero-width score selections and null defaults', () => {
   const value = completeState();
   validateApplicationState(value, 2, columns);
@@ -674,6 +728,30 @@ test('malformed application state inside an otherwise valid bundle is removed wi
   assert.equal((await base.listSessions()).length, 2);
 });
 
+test('bundle import rejects a folder condition missing from its WAV assets', async (t) => {
+  const { base, controller, record } = await setup(t);
+  const invalidFolderState = {
+    ...state(),
+    adoptedFolderLevels: [1],
+    group: {
+      kind: 'category',
+      column: 'WAVフォルダ階層1',
+      a: '正常',
+      b: '要確認',
+    },
+  };
+  const malformed = await base.createSession(
+    input({
+      state: invalidFolderState,
+      audioFiles: new Map([['001.wav', new File(['audio'], '001.wav')]]),
+    }),
+  );
+  const bundle = await base.exportBundle(malformed.id);
+  await assert.rejects(controller.importBundle(bundle), /group/);
+  assert.equal(controller.getSnapshot().active.record.id, record.id);
+  assert.equal((await base.listSessions()).length, 2);
+});
+
 test('committed state is not reported as failed because only the session-list refresh failed', async (t) => {
   let fail = false;
   const { controller } = await setup(t, (base) => ({
@@ -762,7 +840,9 @@ test('changing audio identity or bindings drops only stale audio metadata before
   });
 
   controller.setState('audioAnalyses', metadata);
-  controller.updateAudio(new Map([['s1', new File(['replacement'], 's1.wav')]]));
+  controller.updateAudio(
+    new Map([['s1', new File(['replacement'], 's1.wav')]]),
+  );
   assert.equal(
     controller.getSnapshot().active.record.state.audioAnalyses,
     undefined,

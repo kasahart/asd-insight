@@ -33,6 +33,7 @@ export function ScoreValue({
 export function ScoreComparison({
   dataset,
   columns,
+  sourceColumns,
   scoreColumn,
   descriptions,
   result,
@@ -40,14 +41,19 @@ export function ScoreComparison({
 }: {
   dataset: Dataset;
   columns: string[];
+  sourceColumns?: readonly string[];
   scoreColumn: string;
   descriptions?: Record<string, string>;
   result: EvaluationResult | null;
   children: (comparison: { column: string; control: ReactNode }) => ReactNode;
 }) {
   const [choice, setChoice] = useSessionState('comparisonColumn', '');
+  const allowedColumns = sourceColumns ?? dataset.columns;
+  const comparisonColumns = columns.filter((name) =>
+    allowedColumns.includes(name),
+  );
   const column =
-    dataset.columns.includes(choice) && choice !== scoreColumn ? choice : '';
+    allowedColumns.includes(choice) && choice !== scoreColumn ? choice : '';
   const [sorting, setSorting] = useSessionState<
     Array<{ id: string; desc: boolean }>
   >('tableSorting', [{ id: 'score', desc: false }]);
@@ -68,7 +74,7 @@ export function ScoreComparison({
             <NativeSelect
               id="comparison-score"
               value={column}
-              disabled={!columns.length}
+              disabled={!comparisonColumns.length}
               onChange={(event) => {
                 const value = event.target.value;
                 setChoice(value);
@@ -82,7 +88,7 @@ export function ScoreComparison({
               }
             >
               <option value="">表示しない</option>
-              {columns.map((name) => (
+              {comparisonColumns.map((name) => (
                 <option key={name} value={name}>
                   {name}
                 </option>
@@ -90,7 +96,7 @@ export function ScoreComparison({
             </NativeSelect>
           </div>
           <p id="comparison-score-help">
-            {columns.length
+            {comparisonColumns.length
               ? '表と試聴欄に補助スコアを併記します。分布・判定は変わりません。'
               : '併記できる別の数値列がありません。'}
           </p>

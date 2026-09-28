@@ -5,6 +5,10 @@ import type {
   SaveSessionInput,
   SessionRecord,
 } from '../../packages/contracts/storage.ts';
+import {
+  MAX_FOLDER_LEVELS,
+  folderAttributeColumn,
+} from '../../packages/domain/audio-import.ts';
 
 export type SaveStatus = 'saved' | 'unsaved' | 'saving' | 'error';
 export type WorkspaceSnapshot = {
@@ -143,12 +147,12 @@ export class WorkspaceController {
     const value = typeof update === 'function' ? update(previous) : update;
     if (Object.is(value, previous)) return;
     const state = { ...active.record.state, [key]: value };
-    if (key === 'idColumn' || key === 'audioColumn')
-      delete state.audioAnalyses;
+    if (key === 'idColumn' || key === 'audioColumn') delete state.audioAnalyses;
     validateApplicationState(
       state,
       active.dataset.rows.length,
       active.dataset.columns,
+      [...active.audioFiles.keys()],
     );
     this.version++;
     this.emit({
@@ -167,6 +171,12 @@ export class WorkspaceController {
     )
       throw new Error('音声対応の形式が不正です。');
     const previous = this.snapshot.active.audioFiles;
+    validateApplicationState(
+      this.snapshot.active.record.state,
+      this.snapshot.active.dataset.rows.length,
+      this.snapshot.active.dataset.columns,
+      [...files.keys()],
+    );
     if (
       files.size === previous.size &&
       [...files].every(([key, file]) => previous.get(key) === file)
@@ -263,6 +273,7 @@ export class WorkspaceController {
           record.state,
           current.dataset.rows.length,
           current.dataset.columns,
+          [...current.audioFiles.keys()],
         );
         this.savedVersion = attempt.version;
         this.savedAudioVersion = attempt.audioVersion;
@@ -302,6 +313,7 @@ export class WorkspaceController {
       loaded.record.state,
       loaded.dataset.rows.length,
       loaded.dataset.columns,
+      [...loaded.audioFiles.keys()],
     );
     clearTimeout(this.timer);
     this.version = this.savedVersion = 0;
@@ -336,6 +348,7 @@ export class WorkspaceController {
         input.state,
         input.dataset.rows.length,
         input.dataset.columns,
+        [...(input.audioFiles?.keys() ?? [])],
       );
       await this.flush();
       this.alive();
@@ -345,6 +358,7 @@ export class WorkspaceController {
         loaded.record.state,
         loaded.dataset.rows.length,
         loaded.dataset.columns,
+        [...loaded.audioFiles.keys()],
       );
       await this.flush(); // save edits made while the new dataset was loading
       this.activate(loaded);
@@ -361,6 +375,7 @@ export class WorkspaceController {
         loaded.record.state,
         loaded.dataset.rows.length,
         loaded.dataset.columns,
+        [...loaded.audioFiles.keys()],
       );
       await this.flush();
       this.activate(loaded);
@@ -490,6 +505,7 @@ export class WorkspaceController {
           loaded.record.state,
           loaded.dataset.rows.length,
           loaded.dataset.columns,
+          [...loaded.audioFiles.keys()],
         );
       } catch (error) {
         try {
@@ -637,6 +653,7 @@ export function validateApplicationState(
   state: Record<string, unknown>,
   rows: number,
   columns?: readonly string[],
+  audioFileKeys?: readonly string[],
 ) {
   assertFiniteJson(state);
   object(state, 'state');
@@ -682,14 +699,54 @@ export function validateApplicationState(
     'filterDecision',
     'audioAnalyses',
     'inspectorSelection',
+    'adoptedFolderLevels',
   ];
   keys(state, allowed, '未対応の項目', ['schemaVersion']);
   if (state.schemaVersion !== 1) invalid('schemaVersion');
   if (state.rowCount !== undefined && state.rowCount !== rows)
     invalid('rowCount');
+  const adopted = state.adoptedFolderLevels ?? [];
+  if (
+    !Array.isArray(adopted) ||
+    adopted.length > 64 ||
+    adopted.some(
+      (level) => !Number.isInteger(level) || level < 1 || level > 64,
+    ) ||
+    new Set(adopted).size !== adopted.length
+  )
+    invalid('adoptedFolderLevels');
+  const validColumns = columns && [
+    ...columns,
+    ...adopted.map((level: number) =>
+      folderAttributeColumn({ columns }, level),
+    ),
+  ];
+  const folderLevelByColumn = new Map<string, number>();
+  if (columns)
+    for (const level of adopted as number[])
+      folderLevelByColumn.set(folderAttributeColumn({ columns }, level), level);
+  let actualFolderLevels: Set<number> | undefined;
+  if (audioFileKeys !== undefined) {
+    let maximumDepth = 0;
+    for (const key of audioFileKeys)
+      maximumDepth = Math.max(maximumDepth, key.split('/').length - 1);
+    actualFolderLevels = new Set(
+      Array.from(
+        { length: Math.min(maximumDepth, MAX_FOLDER_LEVELS) },
+        (_, index) => index + 1,
+      ),
+    );
+  }
   const column = (value: unknown, field: string) => {
     text(value, field, 4096);
-    if (value && columns && !columns.includes(value)) invalid(field);
+    if (value && validColumns && !validColumns.includes(value)) invalid(field);
+    const folderLevel = folderLevelByColumn.get(value);
+    if (
+      folderLevel !== undefined &&
+      actualFolderLevels &&
+      !actualFolderLevels.has(folderLevel)
+    )
+      invalid(field);
   };
   for (const key of strings)
     if (Object.hasOwn(state, key)) text(state[key], key);
@@ -930,11 +987,17 @@ export function validateApplicationState(
       bool(s.desc, 'tableSorting');
       if (used.has(s.id)) invalid('tableSorting');
       used.add(s.id);
-      if (!['sample', 'group', 'score', 'attribute'].includes(s.id)) {
-        if (!s.id.startsWith('comparison-score:') || !s.id.slice(17))
-          invalid('tableSorting');
+      if (
+        ['sample', 'relative-path', 'group', 'score', 'attribute'].includes(
+          s.id,
+        )
+      )
+        continue;
+      if (s.id.startsWith('comparison-score:') && s.id.slice(17))
         column(s.id.slice(17), 'tableSorting');
-      }
+      else if (s.id.startsWith('data:') && s.id.slice(5))
+        column(s.id.slice(5), 'tableSorting');
+      else invalid('tableSorting');
     }
   }
   for (const name of ['pagination'])

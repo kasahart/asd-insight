@@ -4,7 +4,6 @@ import {
   AudioLines,
   Info,
   Download,
-  FileAudio,
   X,
   ShieldCheck,
   ListFilter,
@@ -28,6 +27,18 @@ import {
 import { ContextWorkbench } from '@/components/context-workbench';
 import { EvaluationSettings } from '@/components/evaluation-settings';
 import { addAudioAttachments } from '@/lib/audio-attachments';
+import { LIMITS } from '@storage/validation';
+import {
+  MAX_FOLDER_LEVELS,
+  auditAudioMatches,
+  audioListDisplay,
+  folderAttributeCandidates,
+  folderAttributeColumn,
+  folderMembershipSignature,
+  previewItems,
+  sourceColumnSelection,
+  withFolderAttributes,
+} from '@domain/audio-import';
 import {
   type ThresholdReport,
   type PrecisionRecallEvaluation,
@@ -59,12 +70,14 @@ import {
 import type { Dataset } from '@/lib/demo';
 import {
   csvText,
+  audioFileKey,
   defaultGroup,
   findAudio,
   resolveAudio,
   unusedColumn,
   type AudioResolution,
   type GroupSpec,
+  type Profile,
   type Sample,
 } from '@/lib/data';
 
@@ -73,7 +86,6 @@ import { useWorkspace, useSessionState } from '@/state/workspace-context';
 import { EvaluationWorkerClient } from '@domain/evaluation-client';
 import type { QueryMode } from '@contracts/evaluation';
 import type { SessionRecord } from '@contracts/storage';
-import type { Profile } from '@/lib/data';
 
 type AnalysisReportInput = {
   data: Dataset;
@@ -90,6 +102,8 @@ type AnalysisReportInput = {
   bins: number;
   idColumn: string;
   audioColumn: string;
+  adoptedFolderLevels: readonly number[];
+  folderColumns: readonly { column: string; level: number }[];
   range: ScoreRange | null;
   overlapOnly: boolean;
   query: string;
@@ -118,6 +132,8 @@ export function buildAnalysisReport(input: AnalysisReportInput) {
     bins,
     idColumn,
     audioColumn,
+    adoptedFolderLevels,
+    folderColumns,
     range,
     overlapOnly,
     query,
@@ -127,6 +143,23 @@ export function buildAnalysisReport(input: AnalysisReportInput) {
   const { distribution: d, comparison, visible } = review;
   const sampleId = (index: number) =>
     idColumn ? data.rows[index]?.[idColumn] : 'row-' + (index + 1);
+  const usedFolderColumns = folderColumns.filter(
+    ({ column }) =>
+      group.column === column ||
+      (filterValue !== '' && filterColumn === column),
+  );
+  const folderMembership = usedFolderColumns.length
+    ? {
+        algorithm: 'fnv1a32-pair-utf16-v1',
+        columns: usedFolderColumns.map(({ column }) => column),
+        levels: usedFolderColumns.map(({ level }) => level),
+        rowCount: data.rows.length,
+        signature: folderMembershipSignature(
+          data.rows,
+          usedFolderColumns.map(({ column }) => column),
+        ),
+      }
+    : null;
   return {
     application: 'ASD Insight',
     version: 6,
@@ -146,12 +179,8 @@ export function buildAnalysisReport(input: AnalysisReportInput) {
       // when available, is kept separately so the two identities are clear.
       datasetHash: record.datasetHash,
       logicalDatasetHash: record.datasetHash,
-      ...(record.source?.name
-        ? { originalFileName: record.source.name }
-        : {}),
-      ...(record.source?.hash
-        ? { originalFileHash: record.source.hash }
-        : {}),
+      ...(record.source?.name ? { originalFileName: record.source.name } : {}),
+      ...(record.source?.hash ? { originalFileHash: record.source.hash } : {}),
     },
     settings: {
       scoreColumn: score,
@@ -167,6 +196,8 @@ export function buildAnalysisReport(input: AnalysisReportInput) {
       bins,
       idColumn,
       audioColumn,
+      adoptedFolderLevels,
+      ...(folderMembership ? { folderMembership } : {}),
     },
     method: {
       name: 'Area under the precision-recall curve (trapezoidal)',
@@ -186,8 +217,7 @@ export function buildAnalysisReport(input: AnalysisReportInput) {
     },
     usage: {
       purpose: 'reference-exploration',
-      boundary:
-        '参考・探索分析。検査合否や運用しきい値の承認には使用しない。',
+      boundary: '参考・探索分析。検査合否や運用しきい値の承認には使用しない。',
       candidateCaveat:
         '候補はOK基準との不一致を示す参考分類で、真の誤判定とは確定しない。',
       candidateLabels: {
@@ -341,8 +371,11 @@ function AnalysisProvenance({
                 {recentExcluded.length ? (
                   <ul className="provenance-history-list">
                     {recentExcluded.map((entry, index) => (
-                      <li key={`${entry.sampleId ?? entry.rowIndex}-excluded-${index}`}>
-                        {entry.sampleId || `行${entry.rowIndex + 1}`}：{entry.reason}
+                      <li
+                        key={`${entry.sampleId ?? entry.rowIndex}-excluded-${index}`}
+                      >
+                        {entry.sampleId || `行${entry.rowIndex + 1}`}：
+                        {entry.reason}
                       </li>
                     ))}
                   </ul>
@@ -350,7 +383,9 @@ function AnalysisProvenance({
                   '現在の手動除外なし'
                 )}
                 <span className="provenance-exclusion-summary">
-                  自動除外：条件外 {report.summary.excluded.filter.toLocaleString()}件 · 群の欠測・非該当{' '}
+                  自動除外：条件外{' '}
+                  {report.summary.excluded.filter.toLocaleString()}件 ·
+                  群の欠測・非該当{' '}
                   {(
                     report.summary.excluded.groupMissing +
                     report.summary.excluded.groupOther
@@ -364,13 +399,16 @@ function AnalysisProvenance({
                 </span>
                 {excluded.length > recentExcluded.length && (
                   <small className="provenance-more">
-                    現在の除外20件を表示（全{excluded.length}件。全件は確認用JSONで確認できます）
+                    現在の除外20件を表示（全{excluded.length}
+                    件。全件は確認用JSONで確認できます）
                   </small>
                 )}
                 {recentHistory.length ? (
                   <ul className="provenance-history-list">
                     {recentHistory.map((entry, index) => (
-                      <li key={`${entry.sampleId ?? entry.rowIndex}-${entry.at}-${index}`}>
+                      <li
+                        key={`${entry.sampleId ?? entry.rowIndex}-${entry.at}-${index}`}
+                      >
                         {formatReviewHistoryEntry(entry)}
                       </li>
                     ))}
@@ -380,7 +418,8 @@ function AnalysisProvenance({
                 )}
                 {history.length > recentHistory.length && (
                   <small className="provenance-more">
-                    履歴は直近20件を表示（全{history.length}件）。全履歴は確認用JSONで確認できます。
+                    履歴は直近20件を表示（全{history.length}
+                    件）。全履歴は確認用JSONで確認できます。
                   </small>
                 )}
               </dd>
@@ -397,34 +436,40 @@ function AnalysisProvenance({
           >
             <summary>データ識別子・hash（全文）</summary>
             <dl className="provenance-grid">
-            <div>
-              <dt>元データ</dt>
-              <dd>{report.source.name}</dd>
-            </div>
-            {'originalFileName' in report.source && (
               <div>
-                <dt>元ファイル名</dt>
-                <dd>{report.source.originalFileName}</dd>
+                <dt>元データ</dt>
+                <dd>{report.source.name}</dd>
               </div>
-            )}
-            <div>
-              <dt>datasetVersionId</dt>
-              <dd><code>{report.source.datasetVersionId}</code></dd>
-            </div>
-            <div>
-              <dt>論理datasetHash</dt>
-              <dd><code>{report.source.logicalDatasetHash}</code></dd>
-            </div>
-            {'originalFileHash' in report.source && (
+              {'originalFileName' in report.source && (
+                <div>
+                  <dt>元ファイル名</dt>
+                  <dd>{report.source.originalFileName}</dd>
+                </div>
+              )}
               <div>
-                <dt>元ファイルhash</dt>
-                <dd><code>{report.source.originalFileHash}</code></dd>
+                <dt>datasetVersionId</dt>
+                <dd>
+                  <code>{report.source.datasetVersionId}</code>
+                </dd>
               </div>
-            )}
-            <div>
-              <dt>元データ件数</dt>
-              <dd>{report.source.rowCount.toLocaleString()}件</dd>
-            </div>
+              <div>
+                <dt>論理datasetHash</dt>
+                <dd>
+                  <code>{report.source.logicalDatasetHash}</code>
+                </dd>
+              </div>
+              {'originalFileHash' in report.source && (
+                <div>
+                  <dt>元ファイルhash</dt>
+                  <dd>
+                    <code>{report.source.originalFileHash}</code>
+                  </dd>
+                </div>
+              )}
+              <div>
+                <dt>元データ件数</dt>
+                <dd>{report.source.rowCount.toLocaleString()}件</dd>
+              </div>
             </dl>
           </details>
           <details
@@ -476,17 +521,31 @@ export default function Home() {
 
 function DiagnosticsWorkspace() {
   const { active, controller, policy, operation } = useWorkspace();
-  const data = active!.dataset;
+  const sourceData = active!.dataset;
   const datasetSession = active!.record.id;
-  const [score, setScore] = useSessionState('score', '');
+  const [storedScore, setScore] = useSessionState('score', '');
   const [group, setGroup] = useSessionState<GroupSpec>('group', {
     kind: 'category',
     column: '',
     a: '',
     b: '',
   });
-  const [idColumn, setIdColumn] = useSessionState('idColumn', '');
-  const [audioColumn, setAudioColumn] = useSessionState('audioColumn', '');
+  const [storedIdColumn] = useSessionState('idColumn', '');
+  const idColumn = sourceColumnSelection(sourceData.columns, storedIdColumn);
+  const [storedAudioColumn, setAudioColumn] = useSessionState(
+    'audioColumn',
+    '',
+  );
+  const audioColumn = sourceColumnSelection(
+    sourceData.columns,
+    storedAudioColumn,
+  );
+  useEffect(() => {
+    if (storedAudioColumn && !audioColumn) setAudioColumn('');
+  }, [storedAudioColumn, audioColumn, setAudioColumn]);
+  const [adoptedFolderLevels, setAdoptedFolderLevels] = useSessionState<
+    number[]
+  >('adoptedFolderLevels', []);
   const [numericA, setNumericA] = useSessionState('numericA', '');
   const [numericB, setNumericB] = useSessionState('numericB', '');
   const [filterColumn, setFilterColumn] = useSessionState('filterColumn', '');
@@ -511,13 +570,133 @@ function DiagnosticsWorkspace() {
     {},
   );
   const audioFiles = active!.audioFiles;
+  const activeFolderCandidates = useMemo(
+    () => folderAttributeCandidates(audioFiles),
+    [audioFiles],
+  );
+  const folderLevels = useMemo(
+    () =>
+      activeFolderCandidates
+        .slice(0, MAX_FOLDER_LEVELS)
+        .map(({ level }) => level),
+    [activeFolderCandidates],
+  );
+  const folderColumnNames = useMemo(
+    () => folderLevels.map((level) => folderAttributeColumn(sourceData, level)),
+    [sourceData, folderLevels],
+  );
+  useEffect(() => {
+    if (JSON.stringify(adoptedFolderLevels) !== JSON.stringify(folderLevels))
+      setAdoptedFolderLevels(folderLevels);
+  }, [adoptedFolderLevels, folderLevels, setAdoptedFolderLevels]);
+  const data = useMemo(
+    () =>
+      withFolderAttributes(
+        sourceData,
+        idColumn,
+        audioColumn,
+        audioFiles,
+        folderLevels,
+      ),
+    [sourceData, idColumn, audioColumn, audioFiles, folderLevels],
+  );
   const setAudioFiles = (files: Map<string, File>) =>
     controller.updateAudio(files);
   const [message, setMessage] = useState<{
     error: boolean;
     text: string;
   } | null>(null);
-  const audioInput = useRef<HTMLInputElement>(null);
+  const folderInput = useRef<HTMLInputElement>(null);
+  const [pendingAudio, setPendingAudio] = useState<{
+    incoming: File[];
+    files: Map<string, File>;
+    duplicates: string[];
+    changed: number[];
+  } | null>(null);
+  const previewAudit = useMemo(
+    () =>
+      pendingAudio
+        ? auditAudioMatches(
+            sourceData,
+            idColumn,
+            audioColumn,
+            pendingAudio.files,
+          )
+        : null,
+    [pendingAudio, sourceData, idColumn, audioColumn],
+  );
+  const folderCandidates = useMemo(
+    () => folderAttributeCandidates(pendingAudio?.files ?? audioFiles),
+    [pendingAudio?.files, audioFiles],
+  );
+  const audioPreviewSections = useMemo(() => {
+    if (!pendingAudio || !previewAudit) return [];
+    const sections = [
+      {
+        title: '未対応のCSV行',
+        count: previewAudit.missing.length,
+        values: previewItems(previewAudit.missing).map(
+          (item) => `${item.row}行目: ${item.expected || '空欄'}`,
+        ),
+      },
+      {
+        title: '曖昧なCSV行',
+        count: previewAudit.ambiguous.length,
+        values: previewItems(previewAudit.ambiguous).map((item) => {
+          const candidates = previewItems(item.candidates);
+          const omitted = item.candidates.length - candidates.length;
+          return `${item.row}行目: ${candidates.join('、')}${omitted ? `、ほか${omitted}件` : ''}`;
+        }),
+      },
+      {
+        title: '参照されないWAV',
+        count: previewAudit.unused.length,
+        values: previewItems(previewAudit.unused),
+      },
+      {
+        title: '複数行から参照されるWAV',
+        count: previewAudit.repeated.length,
+        values: previewItems(previewAudit.repeated).map((item) => {
+          const rows = previewItems(item.rows);
+          const omitted = item.rows.length - rows.length;
+          return `${item.key}: ${item.rows.length}行から参照（${rows.join('、')}${omitted ? `、ほか${omitted}行` : ''}）`;
+        }),
+      },
+      {
+        title: '重複する相対パス',
+        count: pendingAudio.duplicates.length,
+        values: previewItems(pendingAudio.duplicates),
+      },
+      {
+        title: '既存の対応が変わる行',
+        count: pendingAudio.changed.length,
+        values: previewItems(pendingAudio.changed).map((row) => `${row}行目`),
+      },
+    ];
+    return sections.filter((section) => section.count > 0);
+  }, [pendingAudio, previewAudit]);
+  const audioDisplayColumn = sourceData.demo
+    ? sourceData.columns.includes('audio_file')
+      ? 'audio_file'
+      : ''
+    : audioColumn;
+  const audioDisplay = useMemo(
+    () =>
+      sourceData.rows.map((row, index) => {
+        // The synthetic demo uses the same CSV-style audio_file value as a
+        // normal import. Its audio is generated on demand, so it is available
+        // without a locally attached WAV.
+        const display = audioListDisplay(
+          row,
+          index,
+          idColumn,
+          audioDisplayColumn,
+          audioFiles,
+        );
+        return sourceData.demo ? { ...display, status: '' } : display;
+      }),
+    [sourceData, idColumn, audioDisplayColumn, audioFiles],
+  );
   const [profiles, setProfiles] = useState<Profile[]>([]);
   useEffect(() => {
     const client = new EvaluationWorkerClient();
@@ -534,25 +713,85 @@ function DiagnosticsWorkspace() {
       client.dispose();
     };
   }, [data]);
+  const folderProfiles = useMemo<Profile[]>(() => {
+    if (!folderColumnNames.length) return [];
+    const valueSets = new Map(
+      folderColumnNames.map((column) => [column, new Set<string>()]),
+    );
+    const nonemptyCounts = new Map(
+      folderColumnNames.map((column) => [column, 0]),
+    );
+    for (const row of data.rows) {
+      for (const column of folderColumnNames) {
+        const value = row[column] ?? '';
+        if (!value.trim()) continue;
+        valueSets.get(column)?.add(value);
+        nonemptyCounts.set(column, (nonemptyCounts.get(column) ?? 0) + 1);
+      }
+    }
+    return folderColumnNames.map((column) => ({
+      column,
+      // Folder names are labels even when they look numeric, so they always
+      // use categorical cohorts and retain every value supported by WAVs.
+      numeric: false,
+      values: [...(valueSets.get(column) ?? [])],
+      validNumbers: 0,
+      nonempty: nonemptyCounts.get(column) ?? 0,
+    }));
+  }, [data, folderColumnNames]);
+  const selectableProfiles = useMemo(() => {
+    const folderProfileByColumn = new Map(
+      folderProfiles.map((profile) => [profile.column, profile]),
+    );
+    const merged = profiles.map(
+      (profile) => folderProfileByColumn.get(profile.column) ?? profile,
+    );
+    for (const profile of folderProfiles)
+      if (!profiles.some((candidate) => candidate.column === profile.column))
+        merged.push(profile);
+    return merged;
+  }, [profiles, folderProfiles]);
   const scores = profiles.filter(
     (p) =>
+      sourceData.columns.includes(p.column) &&
       p.numeric &&
-      (p.column === score ||
+      (p.column === storedScore ||
         (p.column !== idColumn && p.column !== audioColumn)),
   );
-  const groupProfiles = profiles.filter(
+  const score =
+    sourceData.columns.includes(storedScore) &&
+    (!profiles.length ||
+      scores.some((profile) => profile.column === storedScore))
+      ? storedScore
+      : (scores[0]?.column ?? '');
+  useEffect(() => {
+    if (score && score !== storedScore) setScore(score);
+  }, [score, storedScore, setScore]);
+  const groupProfiles = selectableProfiles.filter(
     (p) =>
       p.column !== score &&
       (p.column === group.column ||
         (p.column !== idColumn && p.column !== audioColumn)) &&
-      (p.numeric || p.values.length <= 100) &&
+      (p.numeric ||
+        p.values.length <= 100 ||
+        folderColumnNames.includes(p.column)) &&
       p.nonempty > 0,
   );
-  const filterProfiles = profiles.filter(
+  const filterProfiles = selectableProfiles.filter(
     (p) =>
       p.column !== idColumn &&
       p.column !== audioColumn &&
-      p.values.length <= 100,
+      (p.values.length <= 100 || folderColumnNames.includes(p.column)),
+  );
+  const numericColumns = useMemo(
+    () =>
+      profiles
+        .filter(
+          (profile) =>
+            profile.numeric && !folderColumnNames.includes(profile.column),
+        )
+        .map((profile) => profile.column),
+    [profiles, folderColumnNames],
   );
   const effectiveGroup = useMemo<GroupSpec>(
     () =>
@@ -567,8 +806,13 @@ function DiagnosticsWorkspace() {
   );
   const labelA = group.kind === 'category' ? group.a : '≤ ' + numericA,
     labelB = group.kind === 'category' ? group.b : '≥ ' + numericB;
-  const sampleLabel = (s: Sample) =>
-    idColumn ? s.row[idColumn] : 'row-' + (s.index + 1);
+  const sampleLabel = (s: Sample) => {
+    const display = audioDisplay[s.index];
+    const filename = display?.filename ?? `行${s.index + 1}`;
+    return (!audioColumn || !display?.path.trim()) && display?.identifier
+      ? `${filename}（ID: ${display.identifier}）`
+      : filename;
+  };
   const selectSample = useCallback(
     (s: Sample) => setSelected(s.index),
     [setSelected],
@@ -603,7 +847,7 @@ function DiagnosticsWorkspace() {
     setRangeHi('');
   }
   function setGroupColumn(column: string, kind?: 'category' | 'numeric') {
-    const p = profiles.find((p) => p.column === column);
+    const p = selectableProfiles.find((p) => p.column === column);
     if (!p) return;
     const g = defaultGroup(data, p, kind);
     setGroup(g);
@@ -615,23 +859,88 @@ function DiagnosticsWorkspace() {
     setScore(column);
     resetSelection();
     if (group.column === column) {
-      const p = profiles.find(
+      const p = selectableProfiles.find(
         (p) =>
           p.column !== column &&
           p.column !== idColumn &&
           p.column !== audioColumn &&
           p.values.length >= 2 &&
-          (p.numeric || p.values.length <= 100),
+          (p.numeric ||
+            p.values.length <= 100 ||
+            folderColumnNames.includes(p.column)),
       );
       if (p) setGroupColumn(p.column);
       else setGroup({ kind: 'category', column: '', a: '', b: '' });
     }
   }
-  function attachAudio(files: FileList) {
+  function previewAudio(files: FileList) {
+    setPendingAudio(null);
+    if (!audioColumn && !idColumn) {
+      setMessage({
+        error: true,
+        text: '先に音声のファイル名・パス列を選択してください。',
+      });
+      return;
+    }
+    const incoming: File[] = [];
+    const map = new Map(audioFiles);
+    if (map.size > LIMITS.assetCount) {
+      setMessage({
+        error: true,
+        text: `WAVは${LIMITS.assetCount.toLocaleString()}件まで追加できます。現在の対応数が上限を超えています。`,
+      });
+      return;
+    }
+    const duplicates: string[] = [];
+    for (const file of files) {
+      if (!/\.wav$/i.test(file.name)) continue;
+      incoming.push(file);
+      const key = audioFileKey(file);
+      if (map.has(key)) duplicates.push(key);
+      else {
+        map.set(key, file);
+        if (map.size > LIMITS.assetCount) {
+          setMessage({
+            error: true,
+            text: `WAVは${LIMITS.assetCount.toLocaleString()}件まで追加できます。重複を除いた追加後の件数は${map.size.toLocaleString()}件です。`,
+          });
+          return;
+        }
+      }
+    }
+    if (!incoming.length) {
+      setMessage({ error: true, text: '選択したフォルダにWAVがありません。' });
+      return;
+    }
+    const candidateLevels = folderAttributeCandidates(map);
+    if (candidateLevels.length > MAX_FOLDER_LEVELS) {
+      setMessage({
+        error: true,
+        text: `WAVフォルダ階層は${MAX_FOLDER_LEVELS}階層まで分析条件に追加できます。今回のフォルダは${candidateLevels.length}階層あるため、取り込めません。`,
+      });
+      return;
+    }
+    const changed = sourceData.rows.flatMap((row, index) => {
+      const previous = findAudio(row, index, idColumn, audioColumn, audioFiles);
+      return previous &&
+        findAudio(row, index, idColumn, audioColumn, map) !== previous
+        ? [index + 1]
+        : [];
+    });
+    setPendingAudio({
+      incoming,
+      files: map,
+      duplicates,
+      changed,
+    });
+    setMessage(null);
+  }
+  function attachAudio() {
+    if (!pendingAudio) return;
     let map: Map<string, File>;
     try {
-      map = addAudioAttachments(audioFiles, Array.from(files), {
-        rows: data.rows,
+      map = addAudioAttachments(audioFiles, pendingAudio.incoming, {
+        rows: sourceData.rows,
         resolve: (row, index, files) =>
           findAudio(row, index, idColumn, audioColumn, files),
       });
@@ -646,9 +955,18 @@ function DiagnosticsWorkspace() {
       return;
     }
     setAudioFiles(map);
-    const matched = data.rows.filter(
-      (row, index) => !!findAudio(row, index, idColumn, audioColumn, map),
-    ).length;
+    setAdoptedFolderLevels(
+      folderAttributeCandidates(map)
+        .slice(0, MAX_FOLDER_LEVELS)
+        .map(({ level }) => level),
+    );
+    setPendingAudio(null);
+    const matched = auditAudioMatches(
+      sourceData,
+      idColumn,
+      audioColumn,
+      map,
+    ).matched;
     setMessage({
       error: false,
       text:
@@ -715,6 +1033,11 @@ function DiagnosticsWorkspace() {
       bins,
       idColumn,
       audioColumn,
+      adoptedFolderLevels: folderLevels,
+      folderColumns: folderLevels.map((level, index) => ({
+        column: folderColumnNames[index],
+        level,
+      })),
       range,
       overlapOnly,
       query,
@@ -745,13 +1068,15 @@ function DiagnosticsWorkspace() {
   return (
     <div className="lab-shell dark">
       <input
-        ref={audioInput}
+        ref={(node) => {
+          folderInput.current = node;
+          node?.setAttribute('webkitdirectory', '');
+        }}
         type="file"
-        accept="audio/wav,.wav"
         multiple
         hidden
         onChange={(e) => {
-          if (e.target.files) attachAudio(e.target.files);
+          if (e.target.files) previewAudio(e.target.files);
           e.target.value = '';
         }}
       />
@@ -796,6 +1121,9 @@ function DiagnosticsWorkspace() {
           query={query}
           queryMode={queryMode}
           idColumn={idColumn}
+          audioColumn={audioDisplayColumn}
+          derivedFolderColumns={folderColumnNames}
+          numericColumns={numericColumns}
           selectedIndex={selected}
           labelA={labelA}
           labelB={labelB}
@@ -818,12 +1146,12 @@ function DiagnosticsWorkspace() {
             const selectedAudioResolution: AudioResolution<File> | undefined =
               selectedSample
                 ? resolveAudio(
-                  selectedSample.row,
-                  selectedSample.index,
-                  idColumn,
-                  audioColumn,
-                  audioFiles,
-                )
+                    selectedSample.row,
+                    selectedSample.index,
+                    idColumn,
+                    audioColumn,
+                    audioFiles,
+                  )
                 : undefined;
             const selectedAudioFile = selectedAudioResolution?.file;
             return (
@@ -866,7 +1194,7 @@ function DiagnosticsWorkspace() {
                         </option>
                       ))}
                     </NativeSelect>
-                    {profiles.find((p) => p.column === group.column)
+                    {selectableProfiles.find((p) => p.column === group.column)
                       ?.numeric && (
                       <NativeSelect
                         aria-label="群分けの方法"
@@ -882,8 +1210,9 @@ function DiagnosticsWorkspace() {
                         <option
                           value="category"
                           disabled={
-                            (profiles.find((p) => p.column === group.column)
-                              ?.values.length ?? 0) > 100
+                            (selectableProfiles.find(
+                              (p) => p.column === group.column,
+                            )?.values.length ?? 0) > 100
                           }
                         >
                           値をカテゴリとして選ぶ
@@ -906,7 +1235,7 @@ function DiagnosticsWorkspace() {
                             resetSelection();
                           }}
                         >
-                          {profiles
+                          {selectableProfiles
                             .find((p) => p.column === group.column)
                             ?.values.map((v) => (
                               <option key={v} value={v}>
@@ -928,7 +1257,7 @@ function DiagnosticsWorkspace() {
                             resetSelection();
                           }}
                         >
-                          {profiles
+                          {selectableProfiles
                             .find((p) => p.column === group.column)
                             ?.values.map((v) => (
                               <option key={v} value={v}>
@@ -1005,7 +1334,7 @@ function DiagnosticsWorkspace() {
                         }}
                       >
                         <option value="">すべて</option>
-                        {profiles
+                        {selectableProfiles
                           .find((p) => p.column === filterColumn)
                           ?.values.map((v) => (
                             <option value={v} key={v}>
@@ -1020,24 +1349,7 @@ function DiagnosticsWorkspace() {
                     className="mapping-details divided"
                     id="dataset-mapping-details"
                   >
-                    <summary id="dataset-mapping-summary">
-                      サンプル名・試聴音声
-                    </summary>
-                    <div className="field">
-                      <label htmlFor="id-column">サンプル名に使う列</label>
-                      <NativeSelect
-                        id="id-column"
-                        value={idColumn}
-                        onChange={(e) => setIdColumn(e.target.value)}
-                      >
-                        <option value="">行番号を使う</option>
-                        {data.columns.map((c) => (
-                          <option value={c} key={c}>
-                            {c}
-                          </option>
-                        ))}
-                      </NativeSelect>
-                    </div>
+                    <summary id="dataset-mapping-summary">試聴音声</summary>
                     <div className="field">
                       <label htmlFor="audio-column">
                         音声のファイル名・パス列
@@ -1047,8 +1359,8 @@ function DiagnosticsWorkspace() {
                         value={audioColumn}
                         onChange={(e) => setAudioColumn(e.target.value)}
                       >
-                        <option value="">サンプル名とファイル名を対応</option>
-                        {data.columns.map((c) => (
+                        <option value="">音声列を選択してください</option>
+                        {sourceData.columns.map((c) => (
                           <option value={c} key={c}>
                             {c}
                           </option>
@@ -1064,13 +1376,110 @@ function DiagnosticsWorkspace() {
                       {!data.demo && (
                         <Button
                           variant="outline"
-                          onClick={() => audioInput.current?.click()}
+                          onClick={() => folderInput.current?.click()}
                         >
-                          <FileAudio size={14} />
-                          試聴用の音声を追加
+                          WAVフォルダを選択
                         </Button>
                       )}
                     </div>
+                    {pendingAudio && previewAudit && (
+                      <section
+                        className="audio-import-preview"
+                        aria-label="音声の取り込み前確認"
+                      >
+                        <h3>取り込み前の確認</h3>
+                        <p>
+                          {pendingAudio.incoming.length}件のWAVを選択。対応{' '}
+                          {previewAudit.matched}行、未対応{' '}
+                          {previewAudit.missing.length}行、曖昧{' '}
+                          {previewAudit.ambiguous.length}行、未参照{' '}
+                          {previewAudit.unused.length}件、重複参照{' '}
+                          {previewAudit.repeated.length}件、相対パス重複{' '}
+                          {pendingAudio.duplicates.length}件。
+                        </p>
+                        {audioPreviewSections.map(
+                          ({ title, count, values }) => (
+                            <details key={title}>
+                              <summary>
+                                {title}（{count}）
+                              </summary>
+                              <ul>
+                                {values.map((value, index) => (
+                                  <li key={`${index}-${value}`}>{value}</li>
+                                ))}
+                              </ul>
+                              {count > values.length && (
+                                <p>
+                                  先頭{values.length}件を表示（全{count}件）
+                                </p>
+                              )}
+                            </details>
+                          ),
+                        )}
+                        <div className="audio-import-actions">
+                          <Button
+                            onClick={attachAudio}
+                            disabled={
+                              !!(
+                                pendingAudio.duplicates.length ||
+                                pendingAudio.changed.length
+                              )
+                            }
+                          >
+                            確認して追加
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => setPendingAudio(null)}
+                          >
+                            取り消す
+                          </Button>
+                        </div>
+                      </section>
+                    )}
+                    {!!folderCandidates.length && (
+                      <section
+                        className="folder-attributes"
+                        aria-label="WAVフォルダ階層"
+                      >
+                        <h3>フォルダ階層の分析条件</h3>
+                        <p>
+                          フォルダ階層は分析条件の列へ自動追加されます。群分け・絞り込みの選択は変わりません。
+                        </p>
+                        {folderCandidates.length > MAX_FOLDER_LEVELS && (
+                          <p role="alert">
+                            階層が{MAX_FOLDER_LEVELS}
+                            を超えています。表示・分析対象は先頭
+                            {MAX_FOLDER_LEVELS}
+                            階層です。フォルダ構造を浅くすると、すべての階層を追加できます。
+                          </p>
+                        )}
+                        {previewItems(folderCandidates, MAX_FOLDER_LEVELS).map(
+                          ({ level, values }) => {
+                            const visibleValues = previewItems(values, 20);
+                            const omittedValues =
+                              values.length - visibleValues.length;
+                            return (
+                              <div key={level} className="folder-attribute-row">
+                                <span>
+                                  階層{level}：
+                                  {folderAttributeColumn(sourceData, level)}
+                                </span>
+                                <small>
+                                  {visibleValues
+                                    .map(
+                                      ([value, count]) => `${value} (${count})`,
+                                    )
+                                    .join('、')}
+                                  {omittedValues > 0 &&
+                                    `、ほか${omittedValues}種類（全${values.length}種類）`}
+                                </small>
+                              </div>
+                            );
+                          },
+                        )}
+                      </section>
+                    )}
                     <p>
                       試聴・スペクトログラム用です。音声なしでも分布を比較できます。
                     </p>
@@ -1084,9 +1493,13 @@ function DiagnosticsWorkspace() {
                   <div className="page-heading">
                     <h1 title={active!.record.title}>{active!.record.title}</h1>
                     <span className="dataset-label">
-                      元データ: {data.name} · {data.rows.length.toLocaleString()}件
+                      元データ: {data.name} ·{' '}
+                      {data.rows.length.toLocaleString()}件
                     </span>
-                    <div className="analysis-identity" aria-label="分析の識別情報">
+                    <div
+                      className="analysis-identity"
+                      aria-label="分析の識別情報"
+                    >
                       <span>
                         分析ID: <code>{active!.record.id}</code>
                       </span>
@@ -1108,12 +1521,14 @@ function DiagnosticsWorkspace() {
                       columns={profiles
                         .filter(
                           (p) =>
+                            sourceData.columns.includes(p.column) &&
                             p.numeric &&
                             p.column !== score &&
                             p.column !== idColumn &&
                             p.column !== audioColumn,
                         )
                         .map((p) => p.column)}
+                      sourceColumns={sourceData.columns}
                       result={review.workerResult}
                     >
                       {({
@@ -1146,6 +1561,13 @@ function DiagnosticsWorkspace() {
                                   bins,
                                   idColumn,
                                   audioColumn,
+                                  adoptedFolderLevels,
+                                  folderColumns: folderLevels.map(
+                                    (level, index) => ({
+                                      column: folderColumnNames[index],
+                                      level,
+                                    }),
+                                  ),
                                   range,
                                   overlapOnly,
                                   query,
@@ -1488,19 +1910,19 @@ function DiagnosticsWorkspace() {
                                   onClearSearch={() => setQuery('')}
                                   secondaryControl={comparisonControl}
                                   searchControl={
-                                    <div
-                                      className="sample-query-control"
-                                    >
+                                    <div className="sample-query-control">
                                       <label htmlFor="sample-id-query">
                                         <span>
                                           サンプル検索
-                                          <small>英字の大小を区別しません</small>
+                                          <small>
+                                            英字の大小を区別しません
+                                          </small>
                                         </span>
                                         <Input
                                           id="sample-id-query"
                                           className="query-input"
-                                          aria-label="サンプル名で検索"
-                                          placeholder="名前で絞り込み…"
+                                          aria-label="ファイル名・相対パスで検索"
+                                          placeholder="ファイル名・相対パスで絞り込み…"
                                           value={query}
                                           onChange={(e) =>
                                             setQuery(e.target.value)
@@ -1575,6 +1997,9 @@ function DiagnosticsWorkspace() {
                                     pending={review.pending}
                                     samples={review.listed}
                                     idColumn={idColumn}
+                                    audioColumn={audioDisplayColumn}
+                                    datasetColumns={data.columns}
+                                    audioDisplay={audioDisplay}
                                     scoreColumn={score}
                                     comparisonColumn={comparisonColumn}
                                     groupColumn={group.column}
@@ -1618,52 +2043,56 @@ function DiagnosticsWorkspace() {
                                 </p>
                               ) : (
                                 <>
-                              <div className="coverage-row">
-                                <span>
-                                  中央値 群A {formatScore(d.medianA)} / 群B{' '}
-                                  {formatScore(d.medianB)}
-                                </span>
-                                <span>
-                                  比較対象{' '}
-                                  <b>
-                                    {coverage.samples.length.toLocaleString()}
-                                  </b>
-                                  件
-                                </span>
-                                <span>
-                                  群分けの欠測・非数値{' '}
-                                  <b>
-                                    {coverage.missingGroup.toLocaleString()}
-                                  </b>
-                                  件
-                                </span>
-                                <span>
-                                  指定群以外・中間値{' '}
-                                  <b>{coverage.otherGroup.toLocaleString()}</b>
-                                  件
-                                </span>
-                                <span>
-                                  絞り込みで除外{' '}
-                                  <b>
-                                    {coverage.outsideFilter.toLocaleString()}
-                                  </b>
-                                  件
-                                </span>
-                                <span>
-                                  手動除外（全データ）{' '}
-                                  <b>{coverage.ignoredRows.toLocaleString()}</b>
-                                  件
-                                </span>
-                              </div>
-                              <div className="notice">
-                                <Info size={15} />
-                                <p>
-                                  {data.demo
-                                    ? '合成データによるデモです。 '
-                                    : ''}
-                                  選択した2群のスコア分布を比較します。群分けの正しさや、検査の合否性能を判定するものではありません。
-                                </p>
-                              </div>
+                                  <div className="coverage-row">
+                                    <span>
+                                      中央値 群A {formatScore(d.medianA)} / 群B{' '}
+                                      {formatScore(d.medianB)}
+                                    </span>
+                                    <span>
+                                      比較対象{' '}
+                                      <b>
+                                        {coverage.samples.length.toLocaleString()}
+                                      </b>
+                                      件
+                                    </span>
+                                    <span>
+                                      群分けの欠測・非数値{' '}
+                                      <b>
+                                        {coverage.missingGroup.toLocaleString()}
+                                      </b>
+                                      件
+                                    </span>
+                                    <span>
+                                      指定群以外・中間値{' '}
+                                      <b>
+                                        {coverage.otherGroup.toLocaleString()}
+                                      </b>
+                                      件
+                                    </span>
+                                    <span>
+                                      絞り込みで除外{' '}
+                                      <b>
+                                        {coverage.outsideFilter.toLocaleString()}
+                                      </b>
+                                      件
+                                    </span>
+                                    <span>
+                                      手動除外（全データ）{' '}
+                                      <b>
+                                        {coverage.ignoredRows.toLocaleString()}
+                                      </b>
+                                      件
+                                    </span>
+                                  </div>
+                                  <div className="notice">
+                                    <Info size={15} />
+                                    <p>
+                                      {data.demo
+                                        ? '合成データによるデモです。 '
+                                        : ''}
+                                      選択した2群のスコア分布を比較します。群分けの正しさや、検査の合否性能を判定するものではありません。
+                                    </p>
+                                  </div>
                                 </>
                               )}
                             </PersistentDetails>
@@ -1708,6 +2137,11 @@ function DiagnosticsWorkspace() {
                                   demo={data.demo}
                                   file={selectedAudioFile}
                                   audioResolution={selectedAudioResolution}
+                                  sourceDescription={
+                                    selectedAudioResolution?.key
+                                      ? `対応WAV: ${selectedAudioResolution.key}`
+                                      : undefined
+                                  }
                                   onOpenAudioSettings={openAudioSettings}
                                   onAnalysis={(metadata) => {
                                     const sessionId = datasetSession;

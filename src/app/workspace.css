@@ -804,6 +804,11 @@
 .sample-link svg {
   flex-shrink: 0;
 }
+.sample-audio-status {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+}
 .number-cell {
   font-variant-numeric: tabular-nums;
   font-family: var(--font-mono);
@@ -831,6 +836,13 @@
   overflow: hidden;
   color: var(--muted-foreground);
   font-size: 12px;
+}
+.audio-path-cell {
+  min-width: 210px;
+  max-width: 360px;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
 }
 .aggregation-status {
   display: flex;

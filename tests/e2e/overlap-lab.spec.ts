@@ -124,7 +124,9 @@ async function visiblePageScores(page: Page) {
   return page
     .locator('tbody[aria-label="一覧の表示ページ"] tr')
     .evaluateAll((rows) =>
-      rows.map((row) => Number(row.cells[2]?.textContent?.trim() ?? NaN)),
+      rows.map((row) =>
+        Number(row.querySelector('.number-cell')?.textContent?.trim() ?? NaN),
+      ),
     );
 }
 
@@ -178,11 +180,7 @@ test('数値で指定した分布範囲が一覧の候補に連動する', async
   const rangeCount = await listedCount(page);
   expect(rangeCount).toBeGreaterThan(0);
 
-  const visibleScores = await page
-    .locator('tbody[aria-label="一覧の表示ページ"] tr')
-    .evaluateAll((rows) =>
-      rows.map((row) => Number(row.cells[2]?.textContent?.trim() ?? NaN)),
-    );
+  const visibleScores = await visiblePageScores(page);
   expect(visibleScores.length).toBeGreaterThan(0);
   expect(visibleScores.every((score) => score >= 0.2 && score <= 0.4)).toBe(
     true,
@@ -248,7 +246,7 @@ test('一覧からサンプルを選ぶと詳細パネルと参照行が切り�
     .locator('tbody[aria-label="一覧の表示ページ"] button.sample-link')
     .first();
   const sampleId = await sampleLink.getAttribute('title');
-  expect(sampleId).toMatch(/^DEMO-\d{4}$/);
+  expect(sampleId).toMatch(/^DEMO-\d{4}\.wav$/);
   await sampleLink.click();
 
   const inspector = page.getByRole('complementary', {
@@ -288,7 +286,7 @@ test('合成デモの選択とメモが保存され、reload後に分析とし�
     .locator('tbody[aria-label="一覧の表示ページ"] button.sample-link')
     .first();
   const sampleId = await sampleLink.getAttribute('title');
-  expect(sampleId).toMatch(/^DEMO-\d{4}$/);
+  expect(sampleId).toMatch(/^DEMO-\d{4}\.wav$/);
   await sampleLink.click();
   await expect(
     page.getByRole('complementary', { name: '選択サンプルの詳細' }),

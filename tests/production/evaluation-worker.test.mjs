@@ -53,6 +53,7 @@ function transport({ stall = false, messages } = {}) {
         generation: message.workerGeneration,
         id: message.requestId,
         hasDataset: !!message.command.dataset,
+        command: message.command,
       });
       worker.postMessage(message);
     },
@@ -106,6 +107,30 @@ test('real worker parses/profiles/evaluates and transfers a dataset only once pe
     [false, true, false],
   );
   assert.ok(Number.isFinite(engine.lastElapsedMs));
+});
+
+test('repeated list evaluations use the audio source column without cloning row-label arrays', async () => {
+  const sent = [];
+  const engine = client({ createWorker: () => transport({ messages: sent }) });
+  const source = dataset('audio-100k.csv', 100_000);
+  const input = {
+    dataset: source,
+    ...spec,
+    list: { idColumn: 'name', audioColumn: 'name' },
+  };
+  await engine.evaluate(input);
+  const result = await engine.evaluate({
+    ...input,
+    list: { ...input.list, query: 'sample-42001' },
+  });
+  assert.deepEqual(result.listing.listedIndices, [42_001]);
+  assert.equal(sent[0].command.spec.list.audioColumn, 'name');
+  assert.equal('sampleLabels' in sent[0].command.spec.list, false);
+  assert.equal('relativePaths' in sent[0].command.spec.list, false);
+  assert.equal(sent[1].hasDataset, false);
+  assert.equal('sampleLabels' in sent[1].command.spec.list, false);
+  assert.equal('relativePaths' in sent[1].command.spec.list, false);
+  assert.ok(JSON.stringify(sent[1].command).length < 1_000);
 });
 
 test('same-name replacement never reuses the old dataset or exclusion result', async () => {

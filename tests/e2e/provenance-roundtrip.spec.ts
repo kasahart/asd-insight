@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { Buffer } from 'node:buffer';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 
 async function waitForStartup(page: Page) {
   const openData = page.getByRole('button', {
@@ -68,10 +69,9 @@ test('分析の来歴とJSON/CSV/.ovlabの実ファイルを照合し、再取�
   page,
 }, testInfo) => {
   const { mode, dialog } = await openImportedCSV(page);
-  expect(
-    mode,
-    '保存と再取込の回帰には永続ストレージが必要です。',
-  ).toBe('persistent');
+  expect(mode, '保存と再取込の回帰には永続ストレージが必要です。').toBe(
+    'persistent',
+  );
 
   const csv = [
     'sample_id,score,group,audio_file,condition',
@@ -81,14 +81,14 @@ test('分析の来歴とJSON/CSV/.ovlabの実ファイルを照合し、再取�
     'sample-004,0.80,comparison,sample-004.wav,stress',
     '',
   ].join('\n');
-  await dialog
-    .locator('input[type="file"][accept=".csv,.tsv"]')
-    .setInputFiles({
-      name: 'r4-roundtrip.csv',
-      mimeType: 'text/csv',
-      buffer: Buffer.from(csv),
-    });
-  await expect(dialog.getByRole('heading', { name: 'r4-roundtrip.csv' })).toBeVisible();
+  await dialog.locator('input[type="file"][accept=".csv,.tsv"]').setInputFiles({
+    name: 'r4-roundtrip.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(csv),
+  });
+  await expect(
+    dialog.getByRole('heading', { name: 'r4-roundtrip.csv' }),
+  ).toBeVisible();
   await dialog
     .getByRole('button', { name: 'このデータを表示', exact: true })
     .click();
@@ -104,13 +104,18 @@ test('分析の来歴とJSON/CSV/.ovlabの実ファイルを照合し、再取�
   const audioFiles = [1, 2, 3, 4].map((index) =>
     wavFile(`sample-00${index}.wav`, 220 + index * 30),
   );
-  await page
-    .locator('input[type="file"][accept="audio/wav,.wav"]')
-    .setInputFiles(audioFiles);
+  const audioRoot = testInfo.outputPath('wav-folder');
+  await mkdir(audioRoot);
+  for (const file of audioFiles)
+    await writeFile(join(audioRoot, file.name), file.buffer);
+  await page.locator('#dataset-mapping-summary').click();
+  await page.locator('#audio-column').selectOption('audio_file');
+  await page.locator('input[webkitdirectory]').setInputFiles(audioRoot);
+  await page.getByRole('button', { name: '確認して追加' }).click();
   await expect(page.locator('.audio-import-control')).toContainText('4 / 4件');
 
   const firstSample = page.getByRole('button', {
-    name: 'sample-001 を選択',
+    name: 'sample-001.wav を選択',
     exact: true,
   });
   await firstSample.click();
@@ -137,9 +142,7 @@ test('分析の来歴とJSON/CSV/.ovlabの実ファイルを照合し、再取�
     { timeout: 30_000 },
   );
 
-  await page
-    .getByRole('button', { name: /^分布のしきい値設定を開く/ })
-    .click();
+  await page.getByRole('button', { name: /^分布のしきい値設定を開く/ }).click();
   const threshold = page.getByRole('complementary', {
     name: '分布のしきい値設定',
   });
@@ -156,10 +159,12 @@ test('分析の来歴とJSON/CSV/.ovlabの実ファイルを照合し、再取�
   );
 
   await page.getByLabel('検索一致方法', { exact: true }).selectOption('exact');
-  await page.getByLabel('サンプル名で検索', { exact: true }).fill('sample-004');
-  await expect(page.getByRole('heading', { name: /^サンプル一覧/ })).toContainText(
-    '1件',
-  );
+  await page
+    .getByLabel('ファイル名・相対パスで検索', { exact: true })
+    .fill('sample-004.wav');
+  await expect(
+    page.getByRole('heading', { name: /^サンプル一覧/ }),
+  ).toContainText('1件');
 
   const identity = page.locator('.analysis-identity code');
   const originalAnalysisId = await identity.innerText();
@@ -193,7 +198,7 @@ test('分析の来歴とJSON/CSV/.ovlabの実ファイルを照合し、再取�
   };
   expect(provenanceJSON.analysis.id).toBe(originalAnalysisId);
   expect(provenanceJSON.inspection).toMatchObject({
-    query: 'sample-004',
+    query: 'sample-004.wav',
     queryMode: 'exact',
   });
   expect(provenanceJSON.notes.map((entry) => entry.text)).toContain(note);
@@ -201,19 +206,19 @@ test('分析の来歴とJSON/CSV/.ovlabの実ファイルを照合し、再取�
 
   const sourceBeforeHistory = provenanceJSON.source;
   const settingsBeforeHistory = provenanceJSON.settings;
-  const query = page.getByLabel('サンプル名で検索', { exact: true });
-  await query.fill('sample-003');
+  const query = page.getByLabel('ファイル名・相対パスで検索', { exact: true });
+  await query.fill('sample-003.wav');
   await expect(page.locator('main.main-panel')).toHaveAttribute(
     'aria-busy',
     'false',
     { timeout: 30_000 },
   );
-  await expect(provenance).toContainText('名前「sample-003」');
+  await expect(provenance).toContainText('名前「sample-003.wav」');
   await expect(page.locator('#analysis-provenance-json')).toBeVisible();
   const queryUpdatedJSON = JSON.parse(
     await page.locator('#analysis-provenance-json').inputValue(),
   ) as typeof provenanceJSON;
-  expect(queryUpdatedJSON.inspection.query).toBe('sample-003');
+  expect(queryUpdatedJSON.inspection.query).toBe('sample-003.wav');
   expect(queryUpdatedJSON.source).toEqual(sourceBeforeHistory);
   expect(queryUpdatedJSON.settings).toEqual(settingsBeforeHistory);
 
@@ -232,7 +237,7 @@ test('分析の来歴とJSON/CSV/.ovlabの実ファイルを照合し、再取�
   );
   await page
     .getByRole('button', {
-      name: 'sample-001 を一覧から集計に戻す',
+      name: 'sample-001.wav を一覧から集計に戻す',
       exact: true,
     })
     .click();
@@ -262,14 +267,17 @@ test('分析の来歴とJSON/CSV/.ovlabの実ファイルを照合し、再取�
   await expect(provenance).toContainText('復元');
   await expect(provenance).toContainText('roundtrip review');
 
-  await page.getByRole('button', { name: /^すべて/ }).first().click();
+  await page
+    .getByRole('button', { name: /^すべて/ })
+    .first()
+    .click();
   await expect(page.locator('main.main-panel')).toHaveAttribute(
     'aria-busy',
     'false',
     { timeout: 30_000 },
   );
   await page
-    .getByRole('button', { name: 'sample-001 を選択', exact: true })
+    .getByRole('button', { name: 'sample-001.wav を選択', exact: true })
     .first()
     .click();
   const inspector = page.getByRole('complementary', {
@@ -294,9 +302,7 @@ test('分析の来歴とJSON/CSV/.ovlabの実ファイルを照合し、再取�
     'false',
     { timeout: 30_000 },
   );
-  await page
-    .getByRole('button', { name: /^分布のしきい値設定を開く/ })
-    .click();
+  await page.getByRole('button', { name: /^分布のしきい値設定を開く/ }).click();
   const thresholdAgain = page.getByRole('complementary', {
     name: '分布のしきい値設定',
   });
@@ -311,16 +317,16 @@ test('分析の来歴とJSON/CSV/.ovlabの実ファイルを照合し、再取�
     'false',
     { timeout: 30_000 },
   );
-  await query.fill('sample-004');
-  await expect(page.getByRole('heading', { name: /^サンプル一覧/ })).toContainText(
-    '1件',
-  );
+  await query.fill('sample-004.wav');
+  await expect(
+    page.getByRole('heading', { name: /^サンプル一覧/ }),
+  ).toContainText('1件');
   await expect(page.locator('#analysis-provenance-json')).toBeVisible();
   provenanceJSON = JSON.parse(
     await page.locator('#analysis-provenance-json').inputValue(),
   ) as typeof provenanceJSON;
   expect(provenanceJSON.inspection).toMatchObject({
-    query: 'sample-004',
+    query: 'sample-004.wav',
     queryMode: 'exact',
   });
   expect(provenanceJSON.threshold).not.toBeNull();
@@ -359,7 +365,10 @@ test('分析の来歴とJSON/CSV/.ovlabの実ファイルを照合し、再取�
   expect(report.source.datasetHash).toMatch(/^[a-f0-9]{64}$/);
   expect(report.source.logicalDatasetHash).toBe(report.source.datasetHash);
   expect(report.settings.scoreColumn).toBe('score');
-  expect(report.inspection).toMatchObject({ query: 'sample-004', queryMode: 'exact' });
+  expect(report.inspection).toMatchObject({
+    query: 'sample-004.wav',
+    queryMode: 'exact',
+  });
   expect(report.source).toEqual(provenanceJSON.source);
   expect(report.settings).toEqual(provenanceJSON.settings);
   expect(report.threshold).toEqual(provenanceJSON.threshold);
@@ -396,9 +405,9 @@ test('分析の来歴とJSON/CSV/.ovlabの実ファイルを照合し、再取�
   await expect(page.getByLabel('検索一致方法', { exact: true })).toHaveValue(
     'exact',
   );
-  await expect(page.getByLabel('サンプル名で検索', { exact: true })).toHaveValue(
-    'sample-004',
-  );
+  await expect(
+    page.getByLabel('ファイル名・相対パスで検索', { exact: true }),
+  ).toHaveValue('sample-004.wav');
 
   const importedProvenance = page.locator('.analysis-provenance');
   await expect(importedProvenance).toHaveJSProperty('open', false);
@@ -431,10 +440,10 @@ test('分析の来歴とJSON/CSV/.ovlabの実ファイルを照合し、再取�
   expect(importedReport.settings).toEqual(report.settings);
   expect(importedReport.threshold).toEqual(report.threshold);
 
-  await page.getByLabel('サンプル名で検索', { exact: true }).fill('');
+  await page.getByLabel('ファイル名・相対パスで検索', { exact: true }).fill('');
   await page.getByRole('button', { name: /^すべて/ }).click();
   await page
-    .getByRole('button', { name: 'sample-001 を選択', exact: true })
+    .getByRole('button', { name: 'sample-001.wav を選択', exact: true })
     .first()
     .click();
   await expect(page.getByLabel('調査メモ', { exact: true })).toHaveValue(note);
@@ -442,11 +451,15 @@ test('分析の来歴とJSON/CSV/.ovlabの実ファイルを照合し、再取�
     page.getByRole('complementary', { name: '選択サンプルの詳細' }),
   ).toContainText('集計から除外中');
 
-  await page.getByLabel('サンプル名で検索', { exact: true }).fill('sample-004');
   await page
-    .getByRole('button', { name: 'sample-004 を選択', exact: true })
+    .getByLabel('ファイル名・相対パスで検索', { exact: true })
+    .fill('sample-004.wav');
+  await page
+    .getByRole('button', { name: 'sample-004.wav を選択', exact: true })
     .click();
   await expect(
-    page.getByRole('complementary', { name: '選択サンプルの詳細' }).locator('audio'),
+    page
+      .getByRole('complementary', { name: '選択サンプルの詳細' })
+      .locator('audio'),
   ).toBeVisible();
 });

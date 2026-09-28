@@ -29,6 +29,8 @@ import {
   type ScoreRange,
 } from '@/lib/distribution';
 import {
+  derivedPopulationSignature,
+  evaluationPopulationKey,
   type CandidateScope,
   type ReviewCounts,
   type ReviewFilter,
@@ -198,6 +200,9 @@ export function SampleReviewWorkspace({
   query,
   queryMode = 'partial',
   idColumn,
+  audioColumn = '',
+  derivedFolderColumns = [],
+  numericColumns,
   selectedIndex,
   labelA = '群A',
   labelB = '群B',
@@ -215,6 +220,9 @@ export function SampleReviewWorkspace({
   /** Omitted by old callers/bundles to preserve the original partial match. */
   queryMode?: QueryMode;
   idColumn: string;
+  audioColumn?: string;
+  derivedFolderColumns?: readonly string[];
+  numericColumns?: readonly string[];
   selectedIndex: number | null;
   labelA?: string;
   labelB?: string;
@@ -261,17 +269,40 @@ export function SampleReviewWorkspace({
     () => new Set(ignored.map((s) => s.rowIndex)),
     [ignored],
   );
-  const populationKey = JSON.stringify([
-    active!.record.datasetHash,
-    'evaluation-v1',
-    score,
-    group,
-    filterColumn,
-    filterValue,
-    [...ignoredIndices],
-    okGroup,
-    direction,
-  ]);
+  const derivedPopulation = useMemo(
+    () =>
+      derivedPopulationSignature(
+        dataset,
+        group,
+        filterColumn && filterValue
+          ? { column: filterColumn, value: filterValue }
+          : null,
+        ignoredIndices,
+        derivedFolderColumns,
+      ),
+    [
+      dataset,
+      group,
+      filterColumn,
+      filterValue,
+      ignoredIndices,
+      derivedFolderColumns,
+    ],
+  );
+  const populationKey = evaluationPopulationKey(
+    [
+      active!.record.datasetHash,
+      'evaluation-v1',
+      score,
+      group,
+      filterColumn,
+      filterValue,
+      [...ignoredIndices],
+      okGroup,
+      direction,
+    ],
+    derivedPopulation,
+  );
   const selection = setting?.scope === populationKey ? setting.selection : null;
   useEffect(() => {
     if (setting && setting.scope !== populationKey) {
@@ -298,21 +329,29 @@ export function SampleReviewWorkspace({
       ? displayedComparison
       : sort.id === 'attribute'
         ? group.column
-        : '';
+        : sort.id.startsWith('data:')
+          ? sort.id.slice('data:'.length)
+          : '';
     const mapped: NonNullable<EvaluationListSpec['sort']> = sourceColumn
       ? {
           column: sourceColumn,
           desc: sort.desc,
           source: 'row',
-          kind: sort.id === 'attribute' ? 'alphanumeric' : 'number',
+          kind:
+            sort.id.startsWith('comparison-score:') ||
+            numericColumns?.includes(sourceColumn)
+              ? 'number'
+              : 'alphanumeric',
         }
       : {
           column:
             sort.id === 'sample'
               ? '__sample'
-              : sort.id === 'group'
-                ? '__group'
-                : '__score',
+              : sort.id === 'relative-path'
+                ? '__path'
+                : sort.id === 'group'
+                  ? '__group'
+                  : '__score',
           desc:
             sort.id.startsWith('comparison-score:') && !sourceColumn
               ? false
@@ -339,6 +378,7 @@ export function SampleReviewWorkspace({
         query,
         queryMode,
         idColumn,
+        audioColumn,
         decisionFilter: filter,
         sort: mapped,
       },
@@ -361,6 +401,8 @@ export function SampleReviewWorkspace({
     query,
     queryMode,
     idColumn,
+    audioColumn,
+    numericColumns,
     filter,
     sorting,
   ]);
@@ -571,7 +613,9 @@ export function SampleReviewWorkspace({
   }
   const distribution = result?.distribution ?? emptyDistribution;
   const calculationTotal =
-    !pending && execution.result ? execution.result.comparison.samples.length : null;
+    !pending && execution.result
+      ? execution.result.comparison.samples.length
+      : null;
   const listingTotal =
     !pending && execution.result
       ? execution.result.listing.listedIndices.length

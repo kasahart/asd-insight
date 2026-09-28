@@ -65,13 +65,15 @@ export type EvaluationListSpec = {
   /** Older bundles omit this field and retain the original partial match. */
   queryMode?: QueryMode;
   idColumn?: string;
+  /** Source CSV column containing the WAV filename or relative path. */
+  audioColumn?: string;
   decisionFilter?: ReviewFilter;
   overlapOnly?: boolean;
   sort?: EvaluationListSort;
 };
 
 export type EvaluationListSort = {
-  /** Built-in __score, __group, __sample, or an original dataset column name. */
+  /** Built-in __score, __group, __sample, __path, or a dataset column name. */
   column: string;
   desc: boolean;
   /** Explicit row source allows real CSV headers to equal a built-in name. */

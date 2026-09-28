@@ -27,6 +27,7 @@ import type {
 export const DATASET_LIMITS = {
   rows: 100_000,
   columns: 128,
+  folderLevels: 64,
   csvBytes: 20 * 1024 * 1024,
 } as const;
 
@@ -42,10 +43,13 @@ export function validateDataset(dataset: Dataset): void {
     throw new Error('データセットの形式が不正です。');
   if (
     !dataset.columns.length ||
-    dataset.columns.length > DATASET_LIMITS.columns ||
+    dataset.columns.length >
+      DATASET_LIMITS.columns + DATASET_LIMITS.folderLevels ||
     dataset.rows.length > DATASET_LIMITS.rows
   )
-    throw new Error('データセットは100,000行・128列までです。');
+    throw new Error(
+      'データセットは100,000行・CSV128列とWAVフォルダ階層64列までです。',
+    );
   if (
     dataset.columns.some(
       (column) => typeof column !== 'string' || !column.trim(),
@@ -85,6 +89,7 @@ function validateSpec(dataset: Dataset, spec: EvaluationSpec): void {
   if (spec.conditionFilter?.column) requireColumn(spec.conditionFilter.column);
   if (spec.comparisonScoreColumn) requireColumn(spec.comparisonScoreColumn);
   if (spec.list?.idColumn) requireColumn(spec.list.idColumn);
+  if (spec.list?.audioColumn) requireColumn(spec.list.audioColumn);
   if (
     spec.list?.queryMode !== undefined &&
     spec.list.queryMode !== 'partial' &&
@@ -103,7 +108,7 @@ function validateSpec(dataset: Dataset, spec: EvaluationSpec): void {
       throw new Error('一覧の並び順の指定を確認してください。');
     if (
       sort.source === 'row' ||
-      !['__score', '__group', '__sample'].includes(sort.column)
+      !['__score', '__group', '__sample', '__path'].includes(sort.column)
     )
       requireColumn(sort.column);
   }
@@ -264,10 +269,22 @@ export function evaluateDataset(
   const matchesSearch = (sample: Sample) =>
     !query ||
     (() => {
-      const label = (
-        list.idColumn ? sample.row[list.idColumn] : `row-${sample.index + 1}`
-      ).toLowerCase();
-      return queryMode === 'exact' ? label === query : label.includes(query);
+      const sourceValue = list.audioColumn
+        ? (sample.row[list.audioColumn] ?? '')
+        : '';
+      const normalized = sourceValue.replaceAll('\\', '/');
+      const useIdentifier = !list.audioColumn || !sourceValue.trim();
+      const labels = [
+        list.audioColumn && sourceValue.trim()
+          ? normalized.split('/').at(-1) || `行${sample.index + 1}`
+          : `行${sample.index + 1}`,
+        sourceValue,
+        useIdentifier && list.idColumn ? sample.row[list.idColumn] : '',
+      ];
+      return labels.some((value) => {
+        const label = (value ?? '').toLowerCase();
+        return queryMode === 'exact' ? label === query : label.includes(query);
+      });
     })();
   // Excluded recordings remain restorable even when no longer in an overlap bin.
   const beforeDecision = base.samples.filter(
@@ -290,7 +307,7 @@ export function evaluateDataset(
     (sample) => inRange(sample) && inOverlap(sample),
     matchesSearch,
   );
-  const sorted = sortReviewSamples(listing.listed, list.sort, list.idColumn);
+  const sorted = sortReviewSamples(listing.listed, list.sort, list.audioColumn);
   return {
     baseline: compactPartition(dataset, base, new Set()),
     comparison: compactPartition(dataset, retained, ignored),

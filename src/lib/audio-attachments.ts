@@ -1,6 +1,8 @@
 /** Add a batch atomically without replacing files or existing row assignments. */
+import { audioFileKey } from '../../packages/domain/data.ts';
+
 export function addAudioAttachments<
-  T extends { readonly name: string },
+  T extends { readonly name: string; readonly webkitRelativePath?: string },
   Row = unknown,
 >(
   existing: ReadonlyMap<string, T>,
@@ -12,12 +14,13 @@ export function addAudioAttachments<
 ): Map<string, T> {
   const result = new Map(existing);
   for (const file of incoming) {
-    if (result.has(file.name)) {
+    const key = audioFileKey(file);
+    if (result.has(key)) {
       throw new Error(
-        `音声「${file.name}」の名前が重複しています。追加済みの音声は置き換えません。今回の追加を中止しました。ファイル名を一意にしてください。`,
+        `音声「${key}」の相対パスが重複しています。追加済みの音声は置き換えません。今回の追加を中止しました。`,
       );
     }
-    result.set(file.name, file);
+    result.set(key, file);
   }
   if (assignments) {
     // A newly added extension can outrank an older recording in a resolver.
