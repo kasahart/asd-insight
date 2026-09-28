@@ -1436,23 +1436,6 @@
 .review-filter-matrix .candidate-filter-cell[aria-pressed='true'] > small {
   color: inherit;
 }
-.candidate-matrix-value {
-  display: grid;
-  min-height: 64px;
-  align-content: center;
-  gap: 3px;
-  padding: 8px 9px;
-  color: var(--foreground);
-}
-.candidate-matrix-value > span {
-  color: var(--muted-foreground);
-  font-size: 11px;
-  line-height: 1.4;
-}
-.candidate-matrix-value > b {
-  font-size: 14px;
-  font-variant-numeric: tabular-nums;
-}
 .review-filter-utility-buttons {
   display: flex;
   flex-wrap: wrap;
