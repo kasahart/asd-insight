@@ -196,6 +196,47 @@ test('inspection sorting accepts path and dataset attributes, including folder l
   assert.throws(() => validateApplicationState(value, 1, columns));
 });
 
+test('inspection column layout validates saved visibility and order while old states remain valid', () => {
+  const value = state();
+  validateApplicationState(value, 1, columns);
+  value.tableColumnVisibility = {
+    sample: true,
+    'relative-path': false,
+    'data:sample_id': true,
+  };
+  value.tableColumnOrder = [
+    'sample',
+    'data:sample_id',
+    'relative-path',
+    'aggregation',
+  ];
+  validateApplicationState(value, 1, columns);
+  value.tableColumnOrder = ['sample', 'sample'];
+  assert.throws(() => validateApplicationState(value, 1, columns), /tableColumnOrder/);
+  value.tableColumnOrder = ['sample'];
+  value.tableColumnVisibility = { 'data:missing': true };
+  assert.throws(() => validateApplicationState(value, 1, columns), /tableColumnVisibility/);
+  value.tableColumnVisibility = { score: 'yes' };
+  assert.throws(() => validateApplicationState(value, 1, columns), /tableColumnVisibility/);
+});
+
+test('saved legacy and matrix review filters remain valid decision state', () => {
+  const value = state();
+  for (const filter of [
+    'all',
+    'false-positive',
+    'ok-group-ok',
+    'opposite-group-ng',
+    'false-negative',
+    'ignored',
+  ]) {
+    value.filterDecision = { filter, scope: 'saved-population' };
+    validateApplicationState(value, 1, columns);
+  }
+  value.filterDecision = { filter: 'unknown', scope: 'saved-population' };
+  assert.throws(() => validateApplicationState(value, 1, columns));
+});
+
 test('complete schema accepts deliberate string drafts, retained zero-width score selections and null defaults', () => {
   const value = completeState();
   validateApplicationState(value, 2, columns);

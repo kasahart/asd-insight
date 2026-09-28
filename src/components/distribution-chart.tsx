@@ -23,6 +23,7 @@ import {
   useYAxisScale,
 } from 'recharts';
 import { ChartContainer } from '@/components/ui/chart';
+import { Button } from '@/components/ui/button';
 import {
   DistributionSymbol,
   SelectedSamplePoint,
@@ -765,6 +766,27 @@ export function DistributionChart({
           setReferencedContext(context);
       }}
     >
+      {range && onClearRange && (
+        <output
+          className="distribution-range-active-notice"
+          aria-live="polite"
+        >
+          <span>
+            ヒストグラムで選択中：{formatScore(range.lo, 6)} ≤ スコア{' '}
+            {range.includeHi ? '≤' : '<'} {formatScore(range.hi, 6)}
+            （サンプル一覧をこの範囲に絞り込み中）
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-label="ヒストグラムの選択範囲を解除"
+            onClick={onClearRange}
+          >
+            選択範囲を解除
+          </Button>
+        </output>
+      )}
       <ChartContainer
         className="distribution-chart"
         config={{

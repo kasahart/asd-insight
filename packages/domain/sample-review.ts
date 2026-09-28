@@ -7,8 +7,12 @@ import { isDetected, type ThresholdRule } from './threshold.ts';
 export type ReviewFilter =
   | 'all'
   | 'false-positive'
+  | 'ok-group-ok'
+  | 'opposite-group-ng'
   | 'false-negative'
   | 'ignored';
+
+export type ClassificationFilter = Exclude<ReviewFilter, 'all' | 'ignored'>;
 
 export type ReviewReference = {
   okGroup: 'A' | 'B';
@@ -19,6 +23,12 @@ export type ReviewCounts = {
   all: number;
   falsePositive: number | null;
   falseNegative: number | null;
+  matrix: {
+    okGroupNg: number;
+    okGroupOk: number;
+    oppositeGroupNg: number;
+    oppositeGroupOk: number;
+  } | null;
 };
 
 export type ReviewListing = {
@@ -108,7 +118,7 @@ export function candidateScope(
 ): CandidateScope | null {
   if (
     !reference ||
-    (filter !== 'false-positive' && filter !== 'false-negative')
+    !isClassificationFilter(filter)
   )
     return null;
   const candidates = filterReviewSamples(samples, filter, reference);
@@ -130,6 +140,17 @@ export function candidateScope(
   };
 }
 
+export function isClassificationFilter(
+  filter: ReviewFilter,
+): filter is ClassificationFilter {
+  return (
+    filter === 'false-positive' ||
+    filter === 'ok-group-ok' ||
+    filter === 'opposite-group-ng' ||
+    filter === 'false-negative'
+  );
+}
+
 function validateReference(reference: ReviewReference): void {
   if (reference.okGroup !== 'A' && reference.okGroup !== 'B') {
     throw new Error('基準OK群はAまたはBで指定してください。');
@@ -139,13 +160,15 @@ function validateReference(reference: ReviewReference): void {
 function candidateKind(
   sample: Sample,
   reference: ReviewReference,
-): Exclude<ReviewFilter, 'all' | 'ignored'> | null {
-  // A missing score is neither a false positive nor a false negative.
+): ClassificationFilter | null {
+  // A missing score belongs to no threshold classification cell.
   if (!Number.isFinite(sample.score)) return null;
   const detected = isDetected(sample.score, reference.rule);
-  if (sample.group === reference.okGroup && detected) return 'false-positive';
+  if (sample.group === reference.okGroup)
+    return detected ? 'false-positive' : 'ok-group-ok';
   const otherGroup = reference.okGroup === 'A' ? 'B' : 'A';
-  if (sample.group === otherGroup && !detected) return 'false-negative';
+  if (sample.group === otherGroup)
+    return detected ? 'opposite-group-ng' : 'false-negative';
   return null;
 }
 
@@ -158,6 +181,8 @@ export function filterReviewSamples(
   if (
     filter !== 'all' &&
     filter !== 'false-positive' &&
+    filter !== 'ok-group-ok' &&
+    filter !== 'opposite-group-ng' &&
     filter !== 'false-negative' &&
     filter !== 'ignored'
   ) {
@@ -180,17 +205,33 @@ export function reviewCounts(
   reference: ReviewReference | null,
 ): ReviewCounts {
   if (reference === null) {
-    return { all: samples.length, falsePositive: null, falseNegative: null };
+    return {
+      all: samples.length,
+      falsePositive: null,
+      falseNegative: null,
+      matrix: null,
+    };
   }
   validateReference(reference);
-  let falsePositive = 0;
-  let falseNegative = 0;
+  const matrix = {
+    okGroupNg: 0,
+    okGroupOk: 0,
+    oppositeGroupNg: 0,
+    oppositeGroupOk: 0,
+  };
   for (const sample of samples) {
     const kind = candidateKind(sample, reference);
-    if (kind === 'false-positive') falsePositive++;
-    else if (kind === 'false-negative') falseNegative++;
+    if (kind === 'false-positive') matrix.okGroupNg++;
+    else if (kind === 'ok-group-ok') matrix.okGroupOk++;
+    else if (kind === 'opposite-group-ng') matrix.oppositeGroupNg++;
+    else if (kind === 'false-negative') matrix.oppositeGroupOk++;
   }
-  return { all: samples.length, falsePositive, falseNegative };
+  return {
+    all: samples.length,
+    falsePositive: matrix.okGroupNg,
+    falseNegative: matrix.oppositeGroupOk,
+    matrix,
+  };
 }
 
 /**

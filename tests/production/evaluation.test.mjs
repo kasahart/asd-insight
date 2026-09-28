@@ -37,6 +37,43 @@ const spec = {
   bins: 4,
 };
 
+test('the worker evaluation contract filters all four matrix cells and reports their counts', () => {
+  const dataset = make([
+    ['a-ok', -1, 'OK'],
+    ['a-ng', 1, 'OK'],
+    ['b-ok', -1, 'NG'],
+    ['b-ng', 1, 'NG'],
+  ]);
+  const expectedByFilter = new Map([
+    ['ok-group-ok', [0]],
+    ['false-positive', [1]],
+    ['false-negative', [2]],
+    ['opposite-group-ng', [3]],
+  ]);
+  for (const [decisionFilter, indices] of expectedByFilter) {
+    const result = evaluateDataset(dataset, {
+      ...spec,
+      threshold: {
+        kind: 'manual',
+        rule: { threshold: 0, operator: 'gt', direction: 'high' },
+      },
+      list: { decisionFilter },
+    });
+    assert.deepEqual(result.listing.listedIndices, indices);
+    assert.deepEqual(result.listing.counts, {
+      all: 4,
+      falsePositive: 1,
+      falseNegative: 1,
+      matrix: {
+        okGroupNg: 1,
+        okGroupOk: 1,
+        oppositeGroupNg: 1,
+        oppositeGroupOk: 1,
+      },
+    });
+  }
+});
+
 test('128 source columns plus folder attributes can be profiled and evaluated', () => {
   const columns = [
     'score',
@@ -252,11 +289,18 @@ test('one evaluation conserves exclusion/missingness counts and separates review
   assert.deepEqual(result.listing.includedIndices, [1]);
   assert.deepEqual(result.listing.listedIndices, [1, 2]);
   assert.deepEqual(result.listing.ignoredIndices, [2]);
-  assert.deepEqual(result.listing.counts, {
-    all: 3,
-    falsePositive: 1,
-    falseNegative: 0,
-  });
+  assert.deepEqual(
+    {
+      all: result.listing.counts.all,
+      falsePositive: result.listing.counts.falsePositive,
+      falseNegative: result.listing.counts.falseNegative,
+    },
+    {
+      all: 3,
+      falsePositive: 1,
+      falseNegative: 0,
+    },
+  );
   assert.deepEqual(result.scoreCoverage, {
     total: 7,
     primaryValid: 4,

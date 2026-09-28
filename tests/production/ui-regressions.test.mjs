@@ -16,6 +16,7 @@ const bundle = await build({
   stdin: {
     contents: `
     export { SampleTable } from './src/components/sample-table';
+    export { IgnoreSampleAction } from './src/components/sample-review-controls';
     export { ScoreComparison } from './src/components/score-comparison';
     export { DistributionViewport } from './src/components/distribution-viewport';
     export { DistributionChart } from './src/components/distribution-chart';
@@ -84,6 +85,7 @@ try {
 }
 const {
   SampleTable,
+  IgnoreSampleAction,
   ScoreComparison,
   DistributionViewport,
   DistributionChart,
@@ -331,19 +333,101 @@ test('manual pagination shares pinned columns, renders at most eight page rows a
   );
   assert.match(text(footer(app.tree)), /18件中 1–8件.*1 \/ 3/);
   await click(button(app.tree, '次のページ'));
-  assert.equal(listed(app.tree).findAllByType('tr').length, 7);
+  assert.equal(listed(app.tree).findAllByType('tr').length, 8);
   assert.equal(
     app.tree.root.findAll(
       (node) =>
         node.type === 'button' &&
         node.props['aria-label'] === 'sample-10.wav を選択',
     ).length,
-    1,
+    2,
   );
+  assert.ok(names(app.tree).includes('sample-10.wav'));
   await click(button(app.tree, '次のページ'));
   assert.deepEqual(names(app.tree), ['sample-16.wav', 'sample-17.wav']);
   assert.match(text(footer(app.tree)), /18件中 17–18件.*3 \/ 3/);
   assert.equal(button(app.tree, '次のページ').props.disabled, true);
+});
+
+test('sample table columns can be hidden, reordered and restored from the saved analysis state', async () => {
+  const app = await tableFixture({ datasetColumns: ['quality'] });
+  assert.equal(reference(app.tree).findAllByType('td').length, 7);
+
+  const relativePath = app.tree.root.findByProps({
+    'aria-label': '相対パス列を表示',
+  });
+  await act(async () =>
+    relativePath.props.onChange({
+      target: { checked: false },
+      currentTarget: { checked: false },
+    }),
+  );
+  await click(button(app.tree, 'score列を上へ'));
+
+  let cells = reference(app.tree).findAllByType('td');
+  assert.equal(cells.length, 6);
+  assert.match(text(cells[1]), /^0\.1/);
+  assert.equal(text(cells[2]), '群A');
+  assert.equal(
+    app.store.getSnapshot().active.record.state.tableColumnOrder[2],
+    'score',
+  );
+  assert.equal(
+    app.store.getSnapshot().active.record.state.tableColumnVisibility[
+      'relative-path'
+    ],
+    false,
+  );
+
+  await app.reopen();
+  cells = reference(app.tree).findAllByType('td');
+  assert.equal(cells.length, 6);
+  assert.match(text(cells[1]), /^0\.1/);
+  assert.equal(text(cells[2]), '群A');
+});
+
+test('excluded sample detail action restores that sample directly', async () => {
+  let restored;
+  const app = await tableFixture();
+  await act(async () =>
+    app.tree.update(
+      h(
+        Wrap,
+        { store: app.store },
+        h(IgnoreSampleAction, {
+          sample: samples[10],
+          ignored: { reason: 'reviewed' },
+          onIgnore() {},
+          onRestore(index) {
+            restored = index;
+          },
+        }),
+      ),
+    ),
+  );
+  assert.match(text(app.tree.root), /集計から除外中/);
+  await click(button(app.tree, '集計に戻す'));
+  assert.equal(restored, 10);
+});
+
+test('hiding the active sort column moves sorting to a visible column', async () => {
+  const app = await tableFixture({}, {
+    tableSorting: [{ id: 'score', desc: true }],
+  });
+  const scoreVisibility = app.tree.root.findByProps({
+    'aria-label': 'score列を表示',
+  });
+  await act(async () =>
+    scoreVisibility.props.onChange({
+      target: { checked: false },
+      currentTarget: { checked: false },
+    }),
+  );
+  assert.deepEqual(
+    app.store.getSnapshot().active.record.state.tableSorting,
+    [{ id: 'sample', desc: false }],
+  );
+  assert.deepEqual(names(app.tree), samples.slice(0, 8).map((s) => s.row.filename));
 });
 
 test('blank source audio values keep the row action and identify the sample by its source ID', async () => {
@@ -523,7 +607,13 @@ test('two-stage excluded-only restoration preserves a valid page and keeps an em
     onRestore: (index) => restored.push(index),
   });
   await click(button(app.tree, '次のページ'));
-  await click(button(app.tree, 'sample-10.wav を一覧から集計に戻す'));
+  await click(
+    listed(app.tree).find(
+      (node) =>
+        node.type === 'button' &&
+        node.props['aria-label'] === 'sample-10.wav を一覧から集計に戻す',
+    ),
+  );
   assert.deepEqual(restored, [10]);
   const ignored = new Set([...allIgnored].filter((i) => i !== 10));
   await app.update({ ignoredIndices: ignored, pending: true });

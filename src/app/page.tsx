@@ -979,16 +979,6 @@ function DiagnosticsWorkspace() {
           : 'サーバーへの送信はしていません。'),
     });
   }
-  function openAudioSettings() {
-    const details = document.getElementById(
-      'dataset-mapping-details',
-    ) as HTMLDetailsElement | null;
-    const summary = document.getElementById('dataset-mapping-summary');
-    if (!details || !summary) return;
-    if (!details.open) summary.click();
-    details.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-    summary.focus({ preventScroll: true });
-  }
   function chooseRange(r: ScoreRange) {
     setRange(r);
     setOverlapOnly(false);
@@ -2142,7 +2132,6 @@ function DiagnosticsWorkspace() {
                                       ? `対応WAV: ${selectedAudioResolution.key}`
                                       : undefined
                                   }
-                                  onOpenAudioSettings={openAudioSettings}
                                   onAnalysis={(metadata) => {
                                     const sessionId = datasetSession;
                                     if (
@@ -2177,6 +2166,7 @@ function DiagnosticsWorkspace() {
                                     <IgnoreSampleAction
                                       sample={selectedSample}
                                       ignored={selectedExclusion}
+                                      onRestore={review.restore}
                                       onIgnore={(sample, reason) => {
                                         selectSample(sample);
                                         review.ignore(sample, reason);
