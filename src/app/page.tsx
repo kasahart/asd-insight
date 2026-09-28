@@ -608,6 +608,7 @@ function DiagnosticsWorkspace() {
     text: string;
   } | null>(null);
   const folderInput = useRef<HTMLInputElement>(null);
+  const audioImportRequest = useRef(0);
   const audioDragDepth = useRef(0);
   const [audioDragging, setAudioDragging] = useState(false);
   const [pendingAudio, setPendingAudio] = useState<{
@@ -876,8 +877,14 @@ function DiagnosticsWorkspace() {
       else setGroup({ kind: 'category', column: '', a: '', b: '' });
     }
   }
-  function previewAudio(files: Iterable<File>) {
+  function beginAudioImport() {
+    const request = ++audioImportRequest.current;
     setPendingAudio(null);
+    setMessage(null);
+    return request;
+  }
+  function previewAudio(files: Iterable<File>, request: number) {
+    if (request !== audioImportRequest.current) return;
     if (!audioColumn && !idColumn) {
       setMessage({
         error: true,
@@ -939,6 +946,7 @@ function DiagnosticsWorkspace() {
     setMessage(null);
   }
   async function chooseAudioFolder() {
+    const request = beginAudioImport();
     const picker = (
       window as Window & {
         showDirectoryPicker?: (options: {
@@ -952,8 +960,10 @@ function DiagnosticsWorkspace() {
     }
     try {
       const directory = await picker.call(window, { mode: 'read' });
-      previewAudio(await readWavDirectory(directory, LIMITS.assetCount));
+      const files = await readWavDirectory(directory, LIMITS.assetCount);
+      previewAudio(files, request);
     } catch (error) {
+      if (request !== audioImportRequest.current) return;
       if (error instanceof DOMException && error.name === 'AbortError') return;
       setPendingAudio(null);
       setMessage({
@@ -964,6 +974,7 @@ function DiagnosticsWorkspace() {
   }
   function dropAudioFolder(event: React.DragEvent<HTMLButtonElement>) {
     event.preventDefault();
+    const request = beginAudioImport();
     audioDragDepth.current = 0;
     setAudioDragging(false);
     // Chrome requires getAsFileSystemHandle to be called during the drop event.
@@ -996,10 +1007,13 @@ function DiagnosticsWorkspace() {
           (handle): handle is FileSystemDirectoryHandle =>
             handle?.kind === 'directory',
         );
+        if (request !== audioImportRequest.current) return;
         if (directories.length !== 1 || items.length !== 1)
           throw new Error('WAVフォルダを1つドロップしてください。');
-        previewAudio(await readWavDirectory(directories[0], LIMITS.assetCount));
+        const files = await readWavDirectory(directories[0], LIMITS.assetCount);
+        previewAudio(files, request);
       } catch (error) {
+        if (request !== audioImportRequest.current) return;
         setPendingAudio(null);
         setMessage({
           error: true,
@@ -1142,7 +1156,8 @@ function DiagnosticsWorkspace() {
         multiple
         hidden
         onChange={(e) => {
-          if (e.target.files) previewAudio(e.target.files);
+          if (e.target.files)
+            previewAudio(e.target.files, beginAudioImport());
           e.target.value = '';
         }}
       />

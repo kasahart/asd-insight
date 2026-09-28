@@ -88,6 +88,20 @@ test('ドロップしたWAVフォルダを読み取り、取り込み前に対�
   await page.locator('#audio-column').selectOption('audio_file');
   await page.getByRole('button', { name: 'WAVフォルダのドロップ領域' }).evaluate((zone) => {
     let duringDrop = true;
+    let releaseOld: (handle: unknown) => void = () => {};
+    const oldHandle = new Promise<unknown>((resolve) => { releaseOld = resolve; });
+    window.addEventListener('release-old-drop', () => {
+      releaseOld({
+        kind: 'directory',
+        name: 'old',
+        async *entries() {
+          yield ['old.wav', {
+            kind: 'file',
+            async getFile() { return new File(['RIFF0000WAVE'], 'old.wav'); },
+          }];
+        },
+      });
+    }, { once: true });
     const directory = {
       kind: 'directory',
       name: 'audio',
@@ -108,21 +122,30 @@ test('ドロップしたWAVフォルダを読み取り、取り込み前に対�
         }];
       },
     };
-    const drop = new Event('drop', { bubbles: true, cancelable: true });
-    Object.defineProperty(drop, 'dataTransfer', {
-      value: {
-        items: [{
-          kind: 'file',
-          getAsFileSystemHandle() {
-            if (!duringDrop) throw new Error('読み取りハンドルの取得が遅すぎます');
-            return Promise.resolve(directory);
-          },
-        }],
-      },
-    });
-    zone.dispatchEvent(drop);
+    for (const handle of [oldHandle, Promise.resolve(directory)]) {
+      const drop = new Event('drop', { bubbles: true, cancelable: true });
+      Object.defineProperty(drop, 'dataTransfer', {
+        value: {
+          items: [{
+            kind: 'file',
+            getAsFileSystemHandle() {
+              if (!duringDrop) throw new Error('読み取りハンドルの取得が遅すぎます');
+              return handle;
+            },
+          }],
+        },
+      });
+      zone.dispatchEvent(drop);
+    }
     duringDrop = false;
   });
+  await expect(page.getByRole('region', { name: '音声の取り込み前確認' })).toContainText(
+    '対応 1行、未対応 0行',
+  );
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    window.dispatchEvent(new Event('release-old-drop'));
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
   await expect(page.getByRole('region', { name: '音声の取り込み前確認' })).toContainText(
     '対応 1行、未対応 0行',
   );
