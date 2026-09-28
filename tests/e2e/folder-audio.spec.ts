@@ -4,6 +4,132 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Buffer } from 'node:buffer';
 
+test('フォルダ読み取りAPIで相対パスを保持してWAVを取り込む', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'showDirectoryPicker', {
+      configurable: true,
+      value: async (options: { mode: string }) => {
+        document.documentElement.dataset.pickerMode = options.mode;
+        const wav = {
+          kind: 'file',
+          async getFile() {
+            return new File(['RIFF0000WAVE'], '001.wav', {
+              type: 'audio/wav',
+            });
+          },
+        };
+        const equipment = {
+          kind: 'directory',
+          async *entries() {
+            yield ['001.wav', wav];
+          },
+        };
+        const normal = {
+          kind: 'directory',
+          async *entries() {
+            yield ['設備A', equipment];
+          },
+        };
+        return {
+          kind: 'directory',
+          name: 'audio',
+          async *entries() {
+            yield ['正常', normal];
+          },
+        };
+      },
+    });
+  });
+  await page.goto('/');
+  const start = page.getByRole('button', { name: 'データを選ぶ', exact: true });
+  try {
+    await expect(start).toBeVisible({ timeout: 15_000 });
+  } catch {
+    await page.getByRole('button', { name: '保存せず一時利用' }).click();
+  }
+  await start.click();
+  const dialog = page.getByRole('dialog', { name: 'データと保存した分析' });
+  await dialog.locator('input[type="file"][accept=".csv,.tsv"]').setInputFiles({
+    name: 'picker.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      'sample_id,score,group,audio_file\na,0.1,A,正常/設備A/001.wav\nb,0.9,B,missing.wav\n',
+    ),
+  });
+  await dialog.getByRole('button', { name: 'このデータを表示' }).click();
+  await page.locator('#dataset-mapping-summary').click();
+  await page.locator('#audio-column').selectOption('audio_file');
+  await page.getByRole('button', { name: 'WAVフォルダを選択' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-picker-mode', 'read');
+  const preview = page.getByRole('region', { name: '音声の取り込み前確認' });
+  await expect(preview).toContainText('対応 1行、未対応 1行');
+  await expect(page.getByRole('region', { name: 'WAVフォルダ階層' })).toContainText(
+    '正常',
+  );
+});
+
+test('ドロップしたWAVフォルダを読み取り、取り込み前に対応を確認できる', async ({ page }) => {
+  await page.goto('/');
+  const start = page.getByRole('button', { name: 'データを選ぶ', exact: true });
+  try {
+    await expect(start).toBeVisible({ timeout: 15_000 });
+  } catch {
+    await page.getByRole('button', { name: '保存せず一時利用' }).click();
+  }
+  await start.click();
+  const dialog = page.getByRole('dialog', { name: 'データと保存した分析' });
+  await dialog.locator('input[type="file"][accept=".csv,.tsv"]').setInputFiles({
+    name: 'dropped.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from('sample_id,score,group,audio_file\na,0.1,A,正常/設備A/001.wav\n'),
+  });
+  await dialog.getByRole('button', { name: 'このデータを表示' }).click();
+  await page.locator('#dataset-mapping-summary').click();
+  await page.locator('#audio-column').selectOption('audio_file');
+  await page.getByRole('button', { name: 'WAVフォルダのドロップ領域' }).evaluate((zone) => {
+    let duringDrop = true;
+    const directory = {
+      kind: 'directory',
+      name: 'audio',
+      async *entries() {
+        yield ['正常', {
+          kind: 'directory',
+          async *entries() {
+            yield ['設備A', {
+              kind: 'directory',
+              async *entries() {
+                yield ['001.wav', {
+                  kind: 'file',
+                  async getFile() { return new File(['RIFF0000WAVE'], '001.wav'); },
+                }];
+              },
+            }];
+          },
+        }];
+      },
+    };
+    const drop = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, 'dataTransfer', {
+      value: {
+        items: [{
+          kind: 'file',
+          getAsFileSystemHandle() {
+            if (!duringDrop) throw new Error('読み取りハンドルの取得が遅すぎます');
+            return Promise.resolve(directory);
+          },
+        }],
+      },
+    });
+    zone.dispatchEvent(drop);
+    duringDrop = false;
+  });
+  await expect(page.getByRole('region', { name: '音声の取り込み前確認' })).toContainText(
+    '対応 1行、未対応 0行',
+  );
+  await page.getByRole('button', { name: '確認して追加' }).click();
+  await expect(page.locator('.audio-import-control')).toContainText('1 / 1件');
+});
+
 test('階層WAVの自動属性化と一覧での対応状況', async ({ page }) => {
   const root = await mkdtemp(join(tmpdir(), 'asd-insight-folder-'));
   const noAudioRoot = await mkdtemp(join(tmpdir(), 'asd-insight-no-audio-'));

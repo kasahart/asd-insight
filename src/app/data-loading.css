@@ -388,6 +388,24 @@
 .audio-import-control button {
   min-height: 34px;
 }
+.audio-folder-drop-zone {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 18px 12px;
+  border: 1px dashed var(--input-border);
+  border-radius: 8px;
+  color: var(--muted-foreground);
+  background: var(--panel);
+  font-size: 12px;
+  text-align: center;
+  cursor: pointer;
+}
+.audio-folder-drop-zone[data-dragging='true'] {
+  border-color: var(--primary);
+  color: var(--foreground);
+  background: var(--cohort-a-surface);
+}
 .audio-import-preview,
 .folder-attributes {
   margin-top: 12px;
