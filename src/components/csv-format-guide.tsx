@@ -110,7 +110,7 @@ export function CsvFormatGuide({
           <dl className="csv-format-rules">
             <div>
               <dt>保存・上限</dt>
-              <dd>UTF-8（BOM可）・20MBまで。データ100,000行・128列まで。</dd>
+              <dd>UTF-8（BOM可）・20MBまで。データ128列まで。</dd>
             </div>
             <div>
               <dt>列と区切り</dt>

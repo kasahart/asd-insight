@@ -4,6 +4,8 @@ export type Dataset = {
   columns: string[];
   rows: DataRow[];
   demo: boolean;
+  /** Sparse, nonempty derived cells; rows always retain the original CSV values. */
+  derivedColumns?: Map<string, Map<number, string>>;
 };
 export function demoDataset(): Dataset {
   let seed = 8492;

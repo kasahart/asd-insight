@@ -1,3 +1,4 @@
+import { datasetRows } from './dataset-rows.ts';
 import type { Sample } from './data.ts';
 import type { Dataset } from './demo.ts';
 import type { FilterSpec, GroupSpec } from './data.ts';
@@ -77,7 +78,7 @@ export function derivedPopulationSignature(
   let first = 0x811c9dc5;
   let second = 0x9e3779b9;
   let included = 0;
-  for (const [index, row] of dataset.rows.entries()) {
+  for (const [index, row] of datasetRows(dataset).entries()) {
     if (ignoredIndices.has(index)) continue;
     const matchesFilter =
       !conditionFilter ||

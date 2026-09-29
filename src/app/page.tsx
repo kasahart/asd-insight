@@ -1,4 +1,6 @@
 'use client';
+
+import { datasetRows } from '@domain/dataset-rows';
 import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import {
   AudioLines,
@@ -28,7 +30,6 @@ import { ContextWorkbench } from '@/components/context-workbench';
 import { EvaluationSettings } from '@/components/evaluation-settings';
 import { addAudioAttachments } from '@/lib/audio-attachments';
 import { readWavDirectory } from '@/lib/read-wav-directory';
-import { LIMITS } from '@storage/validation';
 import {
   MAX_FOLDER_LEVELS,
   auditAudioMatches,
@@ -143,7 +144,7 @@ export function buildAnalysisReport(input: AnalysisReportInput) {
   } = input;
   const { distribution: d, comparison, visible } = review;
   const sampleId = (index: number) =>
-    idColumn ? data.rows[index]?.[idColumn] : 'row-' + (index + 1);
+    idColumn ? datasetRows(data)[index]?.[idColumn] : 'row-' + (index + 1);
   const usedFolderColumns = folderColumns.filter(
     ({ column }) =>
       group.column === column ||
@@ -156,7 +157,7 @@ export function buildAnalysisReport(input: AnalysisReportInput) {
         levels: usedFolderColumns.map(({ level }) => level),
         rowCount: data.rows.length,
         signature: folderMembershipSignature(
-          data.rows,
+          datasetRows(data),
           usedFolderColumns.map(({ column }) => column),
         ),
       }
@@ -725,7 +726,7 @@ function DiagnosticsWorkspace() {
     const nonemptyCounts = new Map(
       folderColumnNames.map((column) => [column, 0]),
     );
-    for (const row of data.rows) {
+    for (const row of datasetRows(data)) {
       for (const column of folderColumnNames) {
         const value = row[column] ?? '';
         if (!value.trim()) continue;
@@ -831,7 +832,7 @@ function DiagnosticsWorkspace() {
     () =>
       data.demo
         ? 0
-        : data.rows.filter(
+        : datasetRows(data).filter(
             (row, index) =>
               !!findAudio(row, index, idColumn, audioColumn, audioFiles),
           ).length,
@@ -896,13 +897,6 @@ function DiagnosticsWorkspace() {
     }
     const incoming: File[] = [];
     const map = new Map(audioFiles);
-    if (map.size > LIMITS.assetCount) {
-      setMessage({
-        error: true,
-        text: `WAVは${LIMITS.assetCount.toLocaleString()}件まで追加できます。現在の対応数が上限を超えています。`,
-      });
-      return;
-    }
     const duplicates: string[] = [];
     for (const file of files) {
       if (!/\.wav$/i.test(file.name)) continue;
@@ -911,13 +905,7 @@ function DiagnosticsWorkspace() {
       if (map.has(key)) duplicates.push(key);
       else {
         map.set(key, file);
-        if (map.size > LIMITS.assetCount) {
-          setMessage({
-            error: true,
-            text: `WAVは${LIMITS.assetCount.toLocaleString()}件まで追加できます。重複を除いた追加後の件数は${map.size.toLocaleString()}件です。`,
-          });
-          return;
-        }
+
       }
     }
     if (!incoming.length) {
@@ -965,7 +953,7 @@ function DiagnosticsWorkspace() {
       if (request !== audioImportRequest.current) return;
       setPendingAudio(null);
       setMessage(null);
-      const files = await readWavDirectory(directory, LIMITS.assetCount);
+      const files = await readWavDirectory(directory);
       previewAudio(files, request);
     } catch (error) {
       if (request !== audioImportRequest.current) return;
@@ -1015,7 +1003,7 @@ function DiagnosticsWorkspace() {
         if (request !== audioImportRequest.current) return;
         if (directories.length !== 1 || items.length !== 1)
           throw new Error('WAVフォルダを1つドロップしてください。');
-        const files = await readWavDirectory(directories[0], LIMITS.assetCount);
+        const files = await readWavDirectory(directories[0]);
         previewAudio(files, request);
       } catch (error) {
         if (request !== audioImportRequest.current) return;

@@ -44,13 +44,27 @@ export function createEvaluationRuntime() {
           result,
         };
       }
-      if (command.dataset) {
-        validateDataset(command.dataset);
-        current = {
-          key: command.datasetKey,
-          dataset: command.dataset,
-          profiles: null,
+      if (command.dataset && command.datasetUpdate)
+        throw new Error('データセット登録が重複しています。');
+      let dataset = command.dataset;
+      if (command.datasetUpdate) {
+        if (!current || current.key !== command.datasetUpdate.baseDatasetKey)
+          return {
+            ...envelope(),
+            ok: false,
+            error: {
+              code: 'dataset-unavailable',
+              message: 'データセットを読み直してください。',
+            },
+          };
+        dataset = {
+          ...command.datasetUpdate.dataset,
+          rows: current.dataset.rows,
         };
+      }
+      if (dataset) {
+        validateDataset(dataset);
+        current = { key: command.datasetKey, dataset, profiles: null };
       }
       if (!current || current.key !== command.datasetKey)
         return {

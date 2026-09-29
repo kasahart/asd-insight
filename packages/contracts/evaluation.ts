@@ -132,15 +132,17 @@ export type EvaluationResult = {
 
 export type PreparedDataset = { dataset: Dataset; profiles: Profile[] };
 
+export type DatasetRegistration = {
+  datasetKey: string;
+  dataset?: Dataset;
+  /** Reuse immutable CSV rows already registered in this worker generation. */
+  datasetUpdate?: { baseDatasetKey: string; dataset: Omit<Dataset, 'rows'> };
+};
+
 export type EvaluationCommand =
   | { kind: 'parse-csv'; text: string; name: string }
-  | { kind: 'profile'; datasetKey: string; dataset?: Dataset }
-  | {
-      kind: 'evaluate';
-      datasetKey: string;
-      dataset?: Dataset;
-      spec: EvaluationSpec;
-    };
+  | ({ kind: 'profile' } & DatasetRegistration)
+  | ({ kind: 'evaluate'; spec: EvaluationSpec } & DatasetRegistration);
 
 export type EvaluationRequest = {
   workerGeneration: number;

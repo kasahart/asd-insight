@@ -1,4 +1,6 @@
 'use client';
+
+import { datasetRows } from '@domain/dataset-rows';
 import {
   createContext,
   useContext,
@@ -433,9 +435,9 @@ export function SampleReviewWorkspace({
             ...value,
             samples: value.samples.map((s) => ({
               ...s,
-              row: dataset.rows[s.index],
+              row: datasetRows(dataset)[s.index],
             })),
-            memberRows: value.memberIndices.map((i) => dataset.rows[i]),
+            memberRows: value.memberIndices.map((i) => datasetRows(dataset)[i]),
           }
         : emptyPartition,
     [dataset],
@@ -580,7 +582,7 @@ export function SampleReviewWorkspace({
     if (
       pending ||
       execution.error ||
-      dataset.rows[sample.index] !== sample.row ||
+      datasetRows(dataset)[sample.index] !== sample.row ||
       records[sample.index]
     )
       return;

@@ -1,0 +1,12 @@
+{
+  "count": 100001,
+  "columns": 3,
+  "wavBytesEach": 48,
+  "bundleBytes": 38396742,
+  "createMs": 3979.2848079999994,
+  "reopenMs": 2139.350375,
+  "exportMs": 2629.7723100000003,
+  "importMs": 6207.454695,
+  "signature": "fm1-4360a858f64180dc",
+  "peakRssKiB": 1552408
+}

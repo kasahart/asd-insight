@@ -657,7 +657,7 @@ export function validateApplicationState(
 ) {
   assertFiniteJson(state);
   object(state, 'state');
-  integer(rows, '行数', 1, 100_000);
+  integer(rows, '行数', 1, Number.MAX_SAFE_INTEGER);
   const strings = [
     'score',
     'idColumn',
@@ -1048,7 +1048,7 @@ export function validateApplicationState(
     if (state[name] !== undefined) {
       const p = object(state[name], name);
       keys(p, ['pageIndex', 'pageSize'], name);
-      integer(p.pageIndex, name, 0, 100_000);
+      integer(p.pageIndex, name, 0, Number.MAX_SAFE_INTEGER);
       integer(p.pageSize, name, 1, 1000);
     }
   if (state.viewport !== undefined && state.viewport !== null) {

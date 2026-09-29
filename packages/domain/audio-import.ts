@@ -209,17 +209,15 @@ export function withFolderAttributes<T>(
       `WAVフォルダ階層は${MAX_FOLDER_LEVELS}階層まで分析条件に追加できます。フォルダ構造を浅くしてください。`,
     );
   const columns = levels.map((level) => folderAttributeColumn(data, level));
-  return {
-    ...data,
-    columns: [...data.columns, ...columns],
-    rows: data.rows.map((row, index) => {
-      const key = resolveAudio(row, index, idColumn, audioColumn, files).key;
-      const directories = key?.split('/').slice(0, -1) ?? [];
-      const augmentedRow = { ...row };
-      for (let levelIndex = 0; levelIndex < levels.length; levelIndex++)
-        augmentedRow[columns[levelIndex]] =
-          directories[levels[levelIndex] - 1] ?? '';
-      return augmentedRow;
-    }),
-  };
+  const derivedColumns = new Map(data.derivedColumns);
+  for (const column of columns) derivedColumns.set(column, new Map());
+  data.rows.forEach((row, index) => {
+    const key = resolveAudio(row, index, idColumn, audioColumn, files).key;
+    const directories = key?.split('/').slice(0, -1) ?? [];
+    for (let levelIndex = 0; levelIndex < levels.length; levelIndex++) {
+      const value = directories[levels[levelIndex] - 1];
+      if (value) derivedColumns.get(columns[levelIndex])!.set(index, value);
+    }
+  });
+  return { ...data, columns: [...data.columns, ...columns], derivedColumns };
 }
