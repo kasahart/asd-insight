@@ -375,3 +375,23 @@ test('sorting the complete 100,000-row list preserves numeric filename order wit
     `100k complete list natural sort: round trip ${Math.round(performance.now() - start)} ms, worker ${Math.round(engine.lastElapsedMs)} ms, caller ticks ${ticks}`,
   );
 });
+
+test('real worker reuses CSV rows for sparse folder updates and resends after cancellation', async () => {
+  const { withFolderAttributes } = await import('../../packages/domain/audio-import.ts');
+  const base = dataset();
+  const attachments = new Map(base.rows.map((row, i) => [`${i % 2 ? 'b' : 'a'}/${row.name}.wav`, {}]));
+  const augmented = withFolderAttributes(base, 'name', '', attachments, [1]);
+  const sent = [];
+  const engine = client({ createWorker: () => transport({ messages: sent }) });
+  await engine.profile(base);
+  const result = await engine.evaluate({ ...spec, dataset: augmented, group: { kind: 'category', column: 'WAVフォルダ階層1', a: 'a', b: 'b' } });
+  assert.equal(result.a.length, 10);
+  assert.equal(result.b.length, 10);
+  assert.equal(sent[1].command.dataset, undefined);
+  assert.ok(sent[1].command.datasetUpdate);
+  assert.equal('rows' in sent[1].command.datasetUpdate.dataset, false);
+  await engine.profile(base);
+  engine.cancel();
+  await engine.profile(augmented);
+  assert.equal(sent.at(-1).command.dataset, augmented);
+});

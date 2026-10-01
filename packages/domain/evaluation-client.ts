@@ -2,6 +2,7 @@ import type { Dataset } from './demo.ts';
 import type { Profile } from './data.ts';
 import { CSVColumnCountError } from './csv-diagnostics.ts';
 import type {
+  DatasetRegistration,
   EvaluationCommand,
   EvaluationInput,
   EvaluationRequest,
@@ -129,16 +130,22 @@ export class EvaluationWorkerClient {
     this.stop(new DOMException('解析Workerを終了しました。', 'AbortError'));
   }
 
-  private datasetCommand(dataset: Dataset): {
-    datasetKey: string;
-    dataset?: Dataset;
-  } {
+  private datasetCommand(dataset: Dataset): DatasetRegistration {
     // Dataset values are immutable. A new object denotes a new version, even
     // when filenames or row counts happen to match.
     if (this.registeredDataset === dataset)
       return { datasetKey: this.registeredDatasetKey };
+    const previous = this.registeredDataset;
+    const baseDatasetKey = this.registeredDatasetKey;
     this.registeredDataset = dataset;
     this.registeredDatasetKey = `dataset-${++this.nextDatasetId}`;
+    if (previous?.rows === dataset.rows) {
+      const { rows: _rows, ...metadata } = dataset;
+      return {
+        datasetKey: this.registeredDatasetKey,
+        datasetUpdate: { baseDatasetKey, dataset: metadata },
+      };
+    }
     return { datasetKey: this.registeredDatasetKey, dataset };
   }
 

@@ -33,7 +33,7 @@ test('directory picker files keep the same relative keys as webkitdirectory', as
       設備B: directory('設備B', { '001.WAV': file('001.WAV') }),
     }),
   });
-  const files = await readWavDirectory(root, 10);
+  const files = await readWavDirectory(root);
   assert.deepEqual(files.map(audioFileKey), [
     '正常/設備A/001.wav',
     '要確認/設備B/001.WAV',
@@ -42,10 +42,11 @@ test('directory picker files keep the same relative keys as webkitdirectory', as
   assert.equal(files[0].size, 4);
 });
 
-test('directory picker stops before exceeding the WAV count limit', async () => {
-  const root = directory('audio', {
-    'one.wav': file('one.wav'),
-    'two.wav': file('two.wav'),
-  });
-  await assert.rejects(readWavDirectory(root, 1), /1件まで追加できます/);
+test('directory picker accepts more than the former 2,000 WAV limit', async () => {
+  const root = directory('audio', Object.fromEntries(
+    Array.from({ length: 2001 }, (_, index) => [`${index}.wav`, file(`${index}.wav`)]),
+  ));
+  const files = await readWavDirectory(root);
+  assert.equal(files.length, 2001);
+  assert.equal(audioFileKey(files.at(-1)), '2000.wav');
 });

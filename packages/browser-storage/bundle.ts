@@ -160,12 +160,7 @@ export async function readBundle(
     const state = stateValue(metadata.state);
     if ((await sha256(encodeJSON(dataset))) !== metadata.datasetHash)
       fail('データ内容とhashが一致しません。');
-    if (
-      !Array.isArray(metadata.audio) ||
-      !Array.isArray(metadata.assets) ||
-      metadata.audio.length > LIMITS.assetCount ||
-      metadata.assets.length > LIMITS.assetCount + 1
-    )
+    if (!Array.isArray(metadata.audio) || !Array.isArray(metadata.assets))
       fail('復元資産の件数が不正です。');
     const source =
       metadata.source === undefined ? undefined : assetValue(metadata.source);
@@ -194,24 +189,52 @@ export async function readBundle(
     }
     const blobs = new Map<string, Blob>();
     let offset = PREFIX_BYTES + headerBytes;
-    for (const entry of metadata.assets) {
-      if (!plain(entry)) fail('資産entryが不正です。');
-      exactKeys(entry, ['hash', 'size']);
-      const hash = string(entry.hash, '資産hash', 64);
-      if (
-        !referenced.has(hash) ||
-        referenced.get(hash) !== entry.size ||
-        blobs.has(hash)
-      )
-        fail('未知・重複・不一致の資産entryです。');
-      const size = entry.size as number;
-      if (offset + size > blob.size)
-        fail('復元bundleの資産が途中で切れています。');
-      const part = blob.slice(offset, offset + size);
-      if ((await sha256(await part.arrayBuffer())) !== hash)
-        fail('復元資産の内容hashが一致しません。');
-      blobs.set(hash, part);
-      offset += size;
+    // Repeated Blob.slice(offset) can repeatedly walk a many-part exported
+    // bundle. Consume the payload once; only one bounded asset buffer is read
+    // at a time, independent of asset count and underlying Blob fragmentation.
+    const reader = blob.slice(offset).stream().getReader();
+    let chunk: Uint8Array = new Uint8Array();
+    let position = 0;
+    const readBytes = async (size: number) => {
+      const bytes = new Uint8Array(size);
+      let written = 0;
+      while (written < size) {
+        if (position === chunk.length) {
+          const next = await reader.read();
+          if (next.done) fail('復元bundleの資産が途中で切れています。');
+          chunk = next.value;
+          position = 0;
+        }
+        const length = Math.min(size - written, chunk.length - position);
+        bytes.set(chunk.subarray(position, position + length), written);
+        position += length;
+        written += length;
+      }
+      return bytes;
+    };
+    try {
+      for (const entry of metadata.assets) {
+        if (!plain(entry)) fail('資産entryが不正です。');
+        exactKeys(entry, ['hash', 'size']);
+        const hash = string(entry.hash, '資産hash', 64);
+        if (
+          !referenced.has(hash) ||
+          referenced.get(hash) !== entry.size ||
+          blobs.has(hash)
+        )
+          fail('未知・重複・不一致の資産entryです。');
+        const size = entry.size as number;
+        if (offset + size > blob.size)
+          fail('復元bundleの資産が途中で切れています。');
+        const bytes = await readBytes(size);
+        if ((await sha256(bytes)) !== hash)
+          fail('復元資産の内容hashが一致しません。');
+        blobs.set(hash, new Blob([bytes]));
+        offset += size;
+      }
+    } finally {
+      await reader.cancel();
+      reader.releaseLock();
     }
     if (offset !== blob.size || blobs.size !== referenced.size)
       fail('復元bundleに欠落または余分な内容があります。');

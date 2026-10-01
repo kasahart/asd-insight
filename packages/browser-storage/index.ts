@@ -138,8 +138,6 @@ function recordValue(value: unknown): SessionRecord {
       string(item.type, 'MIME type', 256);
       return { ...item } as StoredAsset;
     };
-    if (Object.keys(value.audio).length > LIMITS.assetCount)
-      fail('音声件数が上限を超えています。');
     const audio = Object.fromEntries(
       Object.entries(value.audio).map(([key, item]) => [
         string(key, '音声対応キー', 4096),
@@ -191,8 +189,8 @@ function checkFile(file: File, maximum: number) {
 
 function audioInput(files: Map<string, File> | undefined): Map<string, File> {
   if (files === undefined) return new Map();
-  if (!(files instanceof Map) || files.size > LIMITS.assetCount)
-    fail('音声対応は上限内のMapにしてください。');
+  if (!(files instanceof Map))
+    fail('音声対応はMapにしてください。');
   for (const [key, file] of files) {
     if (!string(key, '音声対応キー', 4096)) fail('音声対応キーが空です。');
     checkFile(file, LIMITS.assetBytes);

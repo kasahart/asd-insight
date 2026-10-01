@@ -1,3 +1,4 @@
+import { datasetRows } from '../../packages/domain/dataset-rows.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -157,8 +158,8 @@ test('preview rows are bounded and saved source-column choices ignore derived co
     new Map([['設備A/正常/001.wav', file('001.wav')]]),
     [1, 2],
   );
-  assert.equal(attached.rows[0]['WAVフォルダ階層1'], '設備A');
-  assert.equal(attached.rows[0]['WAVフォルダ階層2'], '正常');
+  assert.equal(datasetRows(attached)[0]['WAVフォルダ階層1'], '設備A');
+  assert.equal(datasetRows(attached)[0]['WAVフォルダ階層2'], '正常');
 });
 
 test('audio resolution reports only evidence from the existing matching rule', () => {
@@ -470,9 +471,9 @@ test('audit lists missing, ambiguous, unused and repeated attachments before imp
   ]);
   assert.equal(withFolderAttributes(data, '', 'audio_file', files, []), data);
   const adopted = withFolderAttributes(data, '', 'audio_file', files, [1, 2]);
-  assert.equal(adopted.rows[0]['WAVフォルダ階層1'], '正常');
-  assert.equal(adopted.rows[0]['WAVフォルダ階層2'], '設備A');
-  assert.equal(adopted.rows[2]['WAVフォルダ階層1'], '');
+  assert.equal(datasetRows(adopted)[0]['WAVフォルダ階層1'], '正常');
+  assert.equal(datasetRows(adopted)[0]['WAVフォルダ階層2'], '設備A');
+  assert.equal(datasetRows(adopted)[2]['WAVフォルダ階層1'], '');
   assert.equal(data.rows[0]['WAVフォルダ階層1'], undefined);
 });
 

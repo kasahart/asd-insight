@@ -1,4 +1,6 @@
 'use client';
+
+import { datasetRows } from '@domain/dataset-rows';
 import { useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -309,7 +311,7 @@ export function SampleReviewControls({
                 <tbody>
                   {unlistedIgnored.map((entry) => {
                     const label = idColumn
-                      ? dataset.rows[entry.rowIndex]?.[idColumn]
+                      ? datasetRows(dataset)[entry.rowIndex]?.[idColumn]
                       : `row-${entry.rowIndex + 1}`;
                     return (
                       <tr key={entry.rowIndex}>

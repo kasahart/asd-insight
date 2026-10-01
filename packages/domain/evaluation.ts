@@ -1,3 +1,4 @@
+import { datasetRows } from './dataset-rows.ts';
 import { partitionRows, type Sample } from './data.ts';
 import type { Dataset } from './demo.ts';
 import { histogram, scoreInRange } from './distribution.ts';
@@ -25,7 +26,6 @@ import type {
 } from '../contracts/evaluation.ts';
 
 export const DATASET_LIMITS = {
-  rows: 100_000,
   columns: 128,
   folderLevels: 64,
   csvBytes: 20 * 1024 * 1024,
@@ -44,12 +44,9 @@ export function validateDataset(dataset: Dataset): void {
   if (
     !dataset.columns.length ||
     dataset.columns.length >
-      DATASET_LIMITS.columns + DATASET_LIMITS.folderLevels ||
-    dataset.rows.length > DATASET_LIMITS.rows
+      DATASET_LIMITS.columns + DATASET_LIMITS.folderLevels
   )
-    throw new Error(
-      'データセットは100,000行・CSV128列とWAVフォルダ階層64列までです。',
-    );
+    throw new Error('データセットはCSV128列とWAVフォルダ階層64列までです。');
   if (
     dataset.columns.some(
       (column) => typeof column !== 'string' || !column.trim(),
@@ -57,12 +54,35 @@ export function validateDataset(dataset: Dataset): void {
     new Set(dataset.columns).size !== dataset.columns.length
   )
     throw new Error('列名は空欄にせず一意にしてください。');
+  const derived = dataset.derivedColumns;
+  if (derived !== undefined) {
+    if (!(derived instanceof Map) || derived.size > DATASET_LIMITS.folderLevels)
+      throw new Error('派生列の形式が不正です。');
+    for (const [column, cells] of derived) {
+      if (!dataset.columns.includes(column) || !(cells instanceof Map))
+        throw new Error('派生列の形式が不正です。');
+      for (const [index, value] of cells) {
+        if (
+          !Number.isSafeInteger(index) ||
+          index < 0 ||
+          index >= dataset.rows.length ||
+          typeof value !== 'string'
+        )
+          throw new Error('派生セルの形式が不正です。');
+      }
+    }
+  }
+  const derivedNames = [...(derived?.keys() ?? [])];
+  const sourceColumns = dataset.columns.filter(
+    (column) => !derived?.has(column),
+  );
   for (const row of dataset.rows) {
     if (
       !row ||
       typeof row !== 'object' ||
       Array.isArray(row) ||
-      dataset.columns.some(
+      derivedNames.some((column) => Object.hasOwn(row, column)) ||
+      sourceColumns.some(
         (column) =>
           !Object.hasOwn(row, column) || typeof row[column] !== 'string',
       )
@@ -163,7 +183,7 @@ function compactPartition(
 ): EvaluationPartition {
   const members = new Set(partition.memberRows);
   const memberIndices: number[] = [];
-  dataset.rows.forEach((row, index) => {
+  datasetRows(dataset).forEach((row, index) => {
     if (!ignored.has(index) && members.has(row)) memberIndices.push(index);
   });
   return {
@@ -181,14 +201,14 @@ export function evaluateDataset(
   validateSpec(dataset, spec);
   const ignored = new Set(spec.ignoredIndices ?? []);
   const base = partitionRows(
-    dataset.rows,
+    datasetRows(dataset),
     spec.scoreColumn,
     spec.group,
     spec.conditionFilter,
   );
   const retained = ignored.size
     ? partitionRows(
-        dataset.rows,
+        datasetRows(dataset),
         spec.scoreColumn,
         spec.group,
         spec.conditionFilter,

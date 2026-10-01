@@ -1,3 +1,4 @@
+import { datasetRows } from './dataset-rows.ts';
 import type { DataRow, Dataset } from './demo.ts';
 import { finiteNumber, quantile } from './distribution.ts';
 import {
@@ -103,10 +104,6 @@ export function parseCSV(input: string, name = 'data.csv'): Dataset {
               rawRecord: text.slice(recordStartIndex, endIndex),
             }),
           );
-        if (dataRow > 100000)
-          throw new Error(
-            '初版では100,000行まで読めます。ファイルを分割してください。',
-          );
         rows.push(
           Object.fromEntries(
             columns.map((column, index) => [column, cells[index]]),
@@ -186,8 +183,14 @@ export function profileColumns(data: Dataset): Profile[] {
     const values = new Set<string>();
     let validNumbers = 0,
       nonempty = 0;
-    for (const row of data.rows) {
-      const v = row[column]?.trim() ?? '';
+    const cells = data.derivedColumns?.get(column);
+    const entries = cells
+      ? cells.values()
+      : (function* () {
+          for (const row of data.rows) yield row[column];
+        })();
+    for (const cell of entries) {
+      const v = cell?.trim() ?? '';
       if (!v) continue;
       nonempty++;
       if (values.size <= 200) values.add(v);
@@ -214,7 +217,7 @@ export function defaultGroup(
       a: profile.values[0] ?? '',
       b: profile.values[1] ?? '',
     };
-  const values = data.rows
+  const values = datasetRows(data)
     .map((r) => finiteNumber(r[profile.column]))
     .filter((x): x is number => x !== null);
   let lo = quantile(values, 0.3) ?? 0,

@@ -23,7 +23,7 @@ export async function readCSVCandidate(files: readonly File[], signal: AbortSign
   if (files.length !== 1) throw new Error('CSVまたはTSVを1ファイル選んでください。');
   const file = files[0];
   if (!/\.(csv|tsv)$/i.test(file.name)) throw new Error('CSVまたはTSV形式のファイルを選んでください。');
-  if (file.size > 20 * 1024 ** 2) throw new Error('CSVは20MB・100,000行・128列までです。');
+  if (file.size > 20 * 1024 ** 2) throw new Error('CSVは20MB・128列までです。');
   const bytes = await file.arrayBuffer(); signal.throwIfAborted();
   let text: string;
   try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }

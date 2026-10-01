@@ -320,7 +320,7 @@ test('階層WAVの自動属性化と一覧での対応状況', async ({ page }) 
   }
 });
 
-test('音声対応数が保存上限を超えたフォルダは確認画面へ進めない', async ({
+test('2,000件を超えるWAVフォルダを取り込める', async ({
   page,
 }) => {
   const root = await mkdtemp(join(tmpdir(), 'asd-insight-audio-limit-'));
@@ -358,15 +358,12 @@ test('音声対応数が保存上限を超えたフォルダは確認画面へ�
     await page.locator('#group-b').selectOption('B');
     await page.locator('#audio-column').selectOption('audio_file');
     await page.locator('input[webkitdirectory]').setInputFiles(root);
-    await expect(page.locator('.import-error')).toContainText(
-      'WAVは2,000件まで追加できます',
-    );
     await expect(
       page.getByRole('region', { name: '音声の取り込み前確認' }),
-    ).toHaveCount(0);
-    await expect(
-      page.getByRole('button', { name: '確認して追加' }),
-    ).toHaveCount(0);
+    ).toBeVisible();
+    await page.getByRole('button', { name: '確認して追加' }).click();
+    await expect(page.getByText('原音対応 2 / 2件')).toBeVisible();
+
   } finally {
     await rm(root, { recursive: true, force: true });
   }

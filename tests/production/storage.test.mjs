@@ -829,3 +829,26 @@ test('corrupt metadata cannot redirect OPFS reads or authorize garbage collectio
   db.close();
   repo.close();
 });
+
+test('fragmented bundles stream across empty and multi-chunk assets without per-asset slicing', async () => {
+  const repo = await createBrowserRepository(fixture().options);
+  const audioFiles = new Map([
+    ['empty.wav', new File([], 'empty.wav')],
+    ['large.wav', new File([new Uint8Array(150_000).fill(7)], 'large.wav')],
+    ...Array.from({ length: 100 }, (_, i) => [`${i}.wav`, new File([new Uint8Array([i])], `${i}.wav`)]),
+  ]);
+  const record = await repo.createSession(input({ audioFiles }));
+  const exported = await repo.exportBundle(record.id);
+  let slices = 0;
+  class CountingBlob extends Blob {
+    slice(...args) {
+      slices++;
+      return super.slice(...args);
+    }
+  }
+  const restored = await repo.importBundle(new CountingBlob([exported]));
+  assert.equal(restored.audioFiles.size, audioFiles.size);
+  for (const [key, file] of audioFiles) assert.deepEqual(await bytes(restored.audioFiles.get(key)), await bytes(file));
+  assert.equal(slices, 3, 'prefix, metadata, then a single payload stream');
+  repo.close();
+});

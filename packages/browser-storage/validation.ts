@@ -27,8 +27,6 @@ export const LIMITS = Object.freeze({
   sourceBytes: 20 * 1024 * 1024,
   metadataBytes: 48 * 1024 * 1024,
   stateBytes: 2 * 1024 * 1024,
-  assetCount: 2000,
-  rows: 100_000,
   columns: 128,
 });
 
@@ -141,11 +139,14 @@ export function datasetValue(value: unknown): StorageDataset {
     columns.some((column) => !column.trim())
   )
     fail('列は重複のない1〜128列にしてください。');
-  if (!value.rows.length || value.rows.length > LIMITS.rows)
-    fail('行数は1〜100,000行にしてください。');
+  if (!value.rows.length)
+    fail('データ行が必要です。');
+  const columnSet = new Set(columns);
   const rows = value.rows.map((row) => {
     if (!plain(row)) fail('行形式が不正です。');
-    exactKeys(row, columns);
+    const keys = Object.keys(row);
+    if (keys.length !== columns.length || keys.some((key) => !columnSet.has(key)))
+      fail('保存形式に未対応または欠落した項目があります。');
     return Object.fromEntries(
       columns.map((column) => [
         column,
