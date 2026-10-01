@@ -4,7 +4,13 @@ export type StorageDataset = {
   rows: Record<string, string>[];
   demo: boolean;
   /** Reference sessions retain no input rows or original bytes. */
-  externalCSV?: { hash: string; size: number; rowCount: number };
+  externalCSV?: {
+    hash: string;
+    size: number;
+    rowCount: number;
+    /** Parsed dataset identity, independent of this reference storage envelope. */
+    logicalDatasetHash?: string;
+  };
 };
 
 export type AudioReference = {
@@ -34,7 +40,10 @@ export type SessionRecord = {
   state: Record<string, unknown>;
   audio: Record<string, StoredAsset>;
   source?: StoredAsset;
+  /** Hash of the stored dataset envelope, used for integrity validation. */
   datasetHash: string;
+  /** Original parsed dataset identity for reference sessions. */
+  logicalDatasetHash?: string;
   /** Complete bundle size, including its manifest, for this revision. */
   bundleBytes: number;
   /** Present (including []) for a reference session; contains no audio bytes. */

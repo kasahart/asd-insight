@@ -146,8 +146,15 @@ export function datasetValue(value: unknown): StorageDataset {
   if (value.externalCSV !== undefined) {
     const ref = value.externalCSV;
     if (!plain(ref)) fail('元CSVの参照が不正です。');
-    exactKeys(ref, ['hash', 'size', 'rowCount']);
+    exactKeys(
+      ref,
+      ['hash', 'size', 'rowCount', 'logicalDatasetHash'],
+      ['hash', 'size', 'rowCount'],
+    );
     if (
+      (ref.logicalDatasetHash !== undefined &&
+        (typeof ref.logicalDatasetHash !== 'string' ||
+          !/^[a-f0-9]{64}$/.test(ref.logicalDatasetHash))) ||
       typeof ref.hash !== 'string' ||
       !/^[a-f0-9]{64}$/.test(ref.hash) ||
       !Number.isSafeInteger(ref.size) ||
@@ -168,6 +175,9 @@ export function datasetValue(value: unknown): StorageDataset {
         hash: ref.hash,
         size: ref.size as number,
         rowCount: ref.rowCount as number,
+        ...(ref.logicalDatasetHash === undefined
+          ? {}
+          : { logicalDatasetHash: ref.logicalDatasetHash as string }),
       },
     };
   }

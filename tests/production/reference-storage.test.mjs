@@ -2,10 +2,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createBrowserRepository } from '../../packages/browser-storage/index.ts';
 import { WorkspaceController } from '../../src/state/workspace-controller.ts';
-import { inputMembership } from '../../src/state/input-references.ts';
+import {
+  inputMembership,
+  logicalDatasetHash,
+} from '../../src/state/input-references.ts';
 import { withFolderAttributes } from '../../packages/domain/audio-import.ts';
 import { datasetRows } from '../../packages/domain/dataset-rows.ts';
-import { deferred, fixture, rewriteBundle } from './storage-helpers.mjs';
+import {
+  deferred,
+  fixture,
+  rewriteBundle,
+  rawDatabase,
+  rawTransaction,
+} from './storage-helpers.mjs';
 
 function inputs(audioSize = 1024 ** 3) {
   const columns = ['id', 'score', 'group', 'audio_file'];
@@ -328,4 +337,134 @@ test('malformed reference backups never replace existing analyses', async (t) =>
     );
   assert.equal((await repo.listSessions()).length, 1);
   assert.deepEqual((await repo.loadSession(record.id)).record, record);
+});
+
+test('logical dataset identity and scoped decisions survive full-to-reference copies, reopen and bundle import', async (t) => {
+  const repo = await createBrowserRepository({ mode: 'memory' });
+  const controller = new WorkspaceController(repo, 60_000);
+  t.after(() => controller.dispose());
+  const input = inputs();
+  const fullInput = {
+    ...input,
+    audioFiles: new Map(),
+    state: {
+      ...input.state,
+      adoptedFolderLevels: [],
+      group: { kind: 'category', column: 'group', a: 'A', b: 'B' },
+    },
+  };
+  await controller.create(fullInput);
+  const fullHash = controller.getSnapshot().active.record.datasetHash;
+  const thresholdSetting = {
+    scope: fullHash,
+    selection: { kind: 'ok-rate', targetPercent: 13 },
+  };
+  const filterDecision = { scope: fullHash, filter: 'false-positive' };
+  controller.setState('thresholdSetting', thresholdSetting);
+  controller.setState('filterDecision', filterDecision);
+  await controller.saveAsReference();
+  let active = controller.getSnapshot().active;
+  assert.notEqual(active.record.datasetHash, fullHash);
+  assert.equal(active.record.logicalDatasetHash, fullHash);
+  const stored = await repo.loadSession(active.record.id);
+  assert.equal(stored.dataset.externalCSV.logicalDatasetHash, fullHash);
+  assert.deepEqual(active.record.state.thresholdSetting, thresholdSetting);
+  assert.deepEqual(active.record.state.filterDecision, filterDecision);
+  await controller.saveAsCopy();
+  assert.equal(
+    controller.getSnapshot().active.record.logicalDatasetHash,
+    fullHash,
+  );
+  const bundle = await controller.exportBundle();
+  await controller.importBundle(bundle);
+  assert.equal(
+    controller.getSnapshot().pendingResume.record.logicalDatasetHash,
+    fullHash,
+  );
+  await controller.resumeReference(input.dataset, input.source);
+  active = controller.getSnapshot().active;
+  assert.equal(active.record.logicalDatasetHash, fullHash);
+  assert.deepEqual(active.record.state.thresholdSetting, thresholdSetting);
+  assert.deepEqual(active.record.state.filterDecision, filterDecision);
+  const next = new WorkspaceController(repo, 60_000);
+  await next.open(active.record.id);
+  await next.resumeReference(input.dataset, input.source);
+  assert.equal(next.getSnapshot().active.record.logicalDatasetHash, fullHash);
+  next.dispose();
+  // A fresh reference has the same parsed-data identity as a full save.
+  const freshRepo = await createBrowserRepository({ mode: 'memory' });
+  const fresh = new WorkspaceController(freshRepo, 60_000);
+  t.after(() => fresh.dispose());
+  await fresh.create(fullInput, true);
+  assert.equal(fresh.getSnapshot().active.record.logicalDatasetHash, fullHash);
+  const freshBundle = await fresh.exportBundle();
+  await assert.rejects(
+    freshRepo.importBundle(
+      await rewriteBundle(freshBundle, (header) => {
+        header.dataset.externalCSV.logicalDatasetHash = 'f'.repeat(64);
+      }),
+    ),
+    { code: 'CORRUPT' },
+  );
+  await assert.rejects(
+    freshRepo.importBundle(
+      await rewriteBundle(freshBundle, (header) => {
+        header.dataset.externalCSV.logicalDatasetHash = 'invalid';
+      }),
+    ),
+    { code: 'CORRUPT' },
+  );
+});
+
+test('legacy references remain readable and mismatched logical identity metadata is rejected', async (t) => {
+  const env = fixture();
+  const repo = await createBrowserRepository(env.options);
+  t.after(() => repo.close());
+  const input = inputs();
+  const { sha256, encodeJSON } =
+    await import('../../packages/browser-storage/validation.ts');
+  const legacyInput = {
+    title: 'legacy reference',
+    dataset: {
+      ...input.dataset,
+      rows: [],
+      externalCSV: {
+        hash: await sha256(await input.source.arrayBuffer()),
+        size: input.source.size,
+        rowCount: 2,
+      },
+    },
+    state: {},
+    audioReferences: [],
+  };
+  const legacy = await repo.createSession(legacyInput);
+  assert.equal(
+    (await repo.loadSession(legacy.id)).record.logicalDatasetHash,
+    undefined,
+  );
+  assert.equal(logicalDatasetHash(legacy), legacy.datasetHash);
+  const imported = await repo.importBundle(await repo.exportBundle(legacy.id));
+  assert.equal(logicalDatasetHash(imported.record), legacy.datasetHash);
+  const logicalHash = await sha256(encodeJSON(input.dataset));
+  const modern = await repo.createSession({
+    ...legacyInput,
+    dataset: {
+      ...legacyInput.dataset,
+      externalCSV: {
+        ...legacyInput.dataset.externalCSV,
+        logicalDatasetHash: logicalHash,
+      },
+    },
+  });
+  const db = await rawDatabase(env);
+  t.after(() => db.close());
+  // This syntactically valid but inconsistent record must not change population scopes.
+  await rawTransaction(db, ['sessions'], (tx) =>
+    tx.objectStore('sessions').put({
+      ...modern,
+      logicalDatasetHash: 'f'.repeat(64),
+    }),
+  );
+  await assert.rejects(repo.loadSession(modern.id), { code: 'CORRUPT' });
+  assert.equal((await repo.loadSession(legacy.id)).record.id, legacy.id);
 });

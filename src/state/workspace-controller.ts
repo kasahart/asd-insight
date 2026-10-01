@@ -9,8 +9,15 @@ import {
   MAX_FOLDER_LEVELS,
   folderAttributeColumn,
 } from '../../packages/domain/audio-import.ts';
-import { sha256 } from '../../packages/browser-storage/validation.ts';
-import { audioReferences, inputMembership } from './input-references.ts';
+import {
+  encodeJSON,
+  sha256,
+} from '../../packages/browser-storage/validation.ts';
+import {
+  audioReferences,
+  inputMembership,
+  logicalDatasetHash,
+} from './input-references.ts';
 
 export type SaveStatus = 'saved' | 'unsaved' | 'saving' | 'error';
 export type WorkspaceSnapshot = {
@@ -377,6 +384,7 @@ export class WorkspaceController {
   }
   private async referenceInput(
     input: CreateSessionInput,
+    datasetIdentity?: string,
   ): Promise<CreateSessionInput> {
     if (!input.source || input.dataset.demo)
       throw new Error('軽量保存には元CSV・TSVが必要です。');
@@ -391,6 +399,17 @@ export class WorkspaceController {
           hash: await sha256(await input.source.arrayBuffer()),
           size: input.source.size,
           rowCount: input.dataset.rows.length,
+          // Reuse a persisted identity when copying; fresh CSV rows are in column order.
+          logicalDatasetHash:
+            datasetIdentity ??
+            (await sha256(
+              encodeJSON({
+                name: input.dataset.name,
+                columns: input.dataset.columns,
+                rows: input.dataset.rows,
+                demo: input.dataset.demo,
+              }),
+            )),
         },
       },
       state: input.state,
@@ -511,14 +530,17 @@ export class WorkspaceController {
       const active = this.snapshot.active;
       if (!active) throw new Error('分析を選んでください。');
       const version = this.version;
-      const input = await this.referenceInput({
-        title: active.record.title.slice(0, 1000) + '（軽量保存）',
-        dataset: active.dataset,
-        source: active.source,
-        state: active.record.state,
-        audioFiles: active.audioFiles,
-        audioReferences: active.record.audioReferences,
-      });
+      const input = await this.referenceInput(
+        {
+          title: active.record.title.slice(0, 1000) + '（軽量保存）',
+          dataset: active.dataset,
+          source: active.source,
+          state: active.record.state,
+          audioFiles: active.audioFiles,
+          audioReferences: active.record.audioReferences,
+        },
+        logicalDatasetHash(active.record),
+      );
       const record = await this.repository.createSession(input);
       this.alive();
       if (
@@ -551,7 +573,7 @@ export class WorkspaceController {
       };
       const record = await this.repository.createSession(
         active.record.audioReferences !== undefined
-          ? await this.referenceInput(input)
+          ? await this.referenceInput(input, logicalDatasetHash(active.record))
           : input,
       );
       const stored = await this.repository.loadSession(record.id);

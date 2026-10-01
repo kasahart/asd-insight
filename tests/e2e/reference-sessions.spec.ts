@@ -222,3 +222,94 @@ test('軽量保存は元CSVを照合し、欠けた音声があっても階層�
   );
   await expect(inspector).toContainText('集計から除外中');
 });
+
+test('全量から軽量保存へのコピー・再開後もしきい値と判断絞り込みを保持する', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'データを選ぶ', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'データと保存した分析' });
+  await dialog.locator('input[accept=".csv,.tsv"]').setInputFiles(csvFile);
+  await dialog
+    .getByRole('button', { name: 'このデータを表示', exact: true })
+    .click();
+  await expect(page.locator('main.main-panel')).toHaveAttribute(
+    'aria-busy',
+    'false',
+  );
+  await page.getByRole('button', { name: /^分布のしきい値設定を開く/ }).click();
+  const threshold = page.getByRole('complementary', {
+    name: '分布のしきい値設定',
+  });
+  await threshold
+    .getByLabel('OK群のNG候補率上限（%）', { exact: true })
+    .fill('13');
+  await threshold
+    .getByRole('button', { name: '仮しきい値を設定', exact: true })
+    .click();
+  await expect(page.locator('main.main-panel')).toHaveAttribute(
+    'aria-busy',
+    'false',
+  );
+  await page.getByRole('button', { name: /^OK基準群のNG候補/ }).click();
+  const report = async () => {
+    const provenance = page.locator('.analysis-provenance');
+    if (!(await provenance.evaluate((el: HTMLDetailsElement) => el.open)))
+      await provenance.locator(':scope > summary').click();
+    const details = provenance.locator('.provenance-json-details');
+    if (!(await details.evaluate((el: HTMLDetailsElement) => el.open)))
+      await details.locator(':scope > summary').click();
+    return JSON.parse(
+      await page.locator('#analysis-provenance-json').inputValue(),
+    );
+  };
+  const before = await report();
+  expect(before.threshold).not.toBeNull();
+  expect(before.inspection.decisionFilter).toBe('false-positive');
+  await expect(
+    page.getByRole('button', { name: /保存状態と分析を管理/ }),
+  ).toContainText('端末に保存済み');
+  await page.getByRole('button', { name: 'データを選ぶ', exact: true }).click();
+  await dialog
+    .getByRole('button', { name: '保存した分析', exact: true })
+    .click();
+  await dialog
+    .getByRole('button', { name: '現在の調査を軽量保存にコピー', exact: true })
+    .click();
+  await page.keyboard.press('Escape');
+  await expect(dialog).not.toBeVisible();
+  const copied = await report();
+  expect(copied.analysis.id).not.toBe(before.analysis.id);
+  expect(copied.source.logicalDatasetHash).toBe(
+    before.source.logicalDatasetHash,
+  );
+  expect(copied.source.storageDatasetHash).not.toBe(before.source.datasetHash);
+  expect(copied.threshold).toEqual(before.threshold);
+  expect(copied.inspection.decisionFilter).toBe('false-positive');
+  await expect(
+    page.getByRole('button', { name: /保存状態と分析を管理/ }),
+  ).toContainText('端末に保存済み');
+  await page.reload();
+  await page.getByRole('button', { name: 'データを選ぶ', exact: true }).click();
+  await dialog
+    .getByRole('region', { name: '保存した分析' })
+    .getByRole('listitem')
+    .filter({ hasText: '（軽量保存）' })
+    .getByRole('button', { name: '開く', exact: true })
+    .click();
+  await expect(
+    dialog.getByRole('region', { name: '軽量保存の再開' }),
+  ).toBeVisible();
+  await dialog.locator('input[accept=".csv,.tsv"]').setInputFiles(csvFile);
+  await expect(dialog).not.toBeVisible();
+  await expect(page.locator('main.main-panel')).toHaveAttribute(
+    'aria-busy',
+    'false',
+  );
+  const resumed = await report();
+  expect(resumed.source.logicalDatasetHash).toBe(
+    before.source.logicalDatasetHash,
+  );
+  expect(resumed.threshold).toEqual(before.threshold);
+  expect(resumed.inspection.decisionFilter).toBe('false-positive');
+});

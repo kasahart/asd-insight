@@ -3,6 +3,13 @@ import type {
   LoadedSession,
 } from '../../packages/contracts/storage.ts';
 
+/** Logical identity stays stable when the stored dataset becomes a reference stub. */
+export function logicalDatasetHash(
+  record: Pick<LoadedSession['record'], 'datasetHash' | 'logicalDatasetHash'>,
+): string {
+  return record.logicalDatasetHash ?? record.datasetHash;
+}
+
 /** Folder membership survives a missing WAV without pretending its bytes are available. */
 export function inputMembership(loaded: {
   record: Pick<LoadedSession['record'], 'audioReferences'>;

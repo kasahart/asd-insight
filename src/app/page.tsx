@@ -85,7 +85,7 @@ import {
 
 import { ProductionApp, WorkspaceActions } from '@/components/production-app';
 import { useWorkspace, useSessionState } from '@/state/workspace-context';
-import { inputMembership } from '@/state/input-references';
+import { inputMembership, logicalDatasetHash } from '@/state/input-references';
 import { EvaluationWorkerClient } from '@domain/evaluation-client';
 import type { QueryMode } from '@contracts/evaluation';
 import type { SessionRecord } from '@contracts/storage';
@@ -180,8 +180,11 @@ export function buildAnalysisReport(input: AnalysisReportInput) {
       datasetVersionId: record.datasetVersionId,
       // datasetHash is the logical parsed-dataset hash.  A source asset hash,
       // when available, is kept separately so the two identities are clear.
-      datasetHash: record.datasetHash,
-      logicalDatasetHash: record.datasetHash,
+      datasetHash: logicalDatasetHash(record),
+      logicalDatasetHash: logicalDatasetHash(record),
+      ...(record.logicalDatasetHash
+        ? { storageDatasetHash: record.datasetHash }
+        : {}),
       ...(record.source?.name ? { originalFileName: record.source.name } : {}),
       ...(record.source?.hash ? { originalFileHash: record.source.hash } : {}),
     },

@@ -75,6 +75,7 @@ function recordValue(value: unknown): SessionRecord {
         'datasetHash',
         'bundleBytes',
         'audioReferences',
+        'logicalDatasetHash',
       ],
       [
         'id',
@@ -105,6 +106,9 @@ function recordValue(value: unknown): SessionRecord {
     )
       fail('調査revisionまたは容量が不正です。');
     if (
+      (value.logicalDatasetHash !== undefined &&
+        (typeof value.logicalDatasetHash !== 'string' ||
+          !/^[a-f0-9]{64}$/.test(value.logicalDatasetHash))) ||
       typeof value.datasetHash !== 'string' ||
       !/^[a-f0-9]{64}$/.test(value.datasetHash) ||
       !plain(value.audio)
@@ -377,6 +381,7 @@ export async function createBrowserRepository(
     try {
       const value = datasetValue(loaded.dataset.value);
       if (
+        value.externalCSV?.logicalDatasetHash !== record.logicalDatasetHash ||
         !!value.externalCSV !== (record.audioReferences !== undefined) ||
         (value.externalCSV &&
           (record.source || Object.keys(record.audio).length))
@@ -473,6 +478,11 @@ export async function createBrowserRepository(
       state,
       audio: {},
       datasetHash: dataset.hash,
+      ...(datasetValueCopy.externalCSV?.logicalDatasetHash === undefined
+        ? {}
+        : {
+            logicalDatasetHash: datasetValueCopy.externalCSV.logicalDatasetHash,
+          }),
       bundleBytes: 0,
       ...(references === undefined ? {} : { audioReferences: references }),
     };

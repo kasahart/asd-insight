@@ -1,6 +1,7 @@
 'use client';
 
 import { datasetRows } from '@domain/dataset-rows';
+import { logicalDatasetHash } from '@/state/input-references';
 import {
   createContext,
   useContext,
@@ -294,7 +295,7 @@ export function SampleReviewWorkspace({
   );
   const populationKey = evaluationPopulationKey(
     [
-      active!.record.datasetHash,
+      logicalDatasetHash(active!.record),
       'evaluation-v1',
       score,
       group,
