@@ -85,6 +85,7 @@ import {
 
 import { ProductionApp, WorkspaceActions } from '@/components/production-app';
 import { useWorkspace, useSessionState } from '@/state/workspace-context';
+import { inputMembership } from '@/state/input-references';
 import { EvaluationWorkerClient } from '@domain/evaluation-client';
 import type { QueryMode } from '@contracts/evaluation';
 import type { SessionRecord } from '@contracts/storage';
@@ -572,9 +573,11 @@ function DiagnosticsWorkspace() {
     {},
   );
   const audioFiles = active!.audioFiles;
+  const references = active!.record.audioReferences;
+  const membership = useMemo(() => inputMembership({ record: { audioReferences: references }, audioFiles }), [audioFiles, references]);
   const activeFolderCandidates = useMemo(
-    () => folderAttributeCandidates(audioFiles),
-    [audioFiles],
+    () => folderAttributeCandidates(membership),
+    [membership],
   );
   const folderLevels = useMemo(
     () =>
@@ -597,10 +600,10 @@ function DiagnosticsWorkspace() {
         sourceData,
         idColumn,
         audioColumn,
-        audioFiles,
+        membership,
         folderLevels,
       ),
-    [sourceData, idColumn, audioColumn, audioFiles, folderLevels],
+    [sourceData, idColumn, audioColumn, membership, folderLevels],
   );
   const setAudioFiles = (files: Map<string, File>) =>
     controller.updateAudio(files);
@@ -1027,6 +1030,7 @@ function DiagnosticsWorkspace() {
         resolve: (row, index, files) =>
           findAudio(row, index, idColumn, audioColumn, files),
       });
+      setAudioFiles(map);
     } catch (error) {
       setMessage({
         error: true,
@@ -1037,9 +1041,8 @@ function DiagnosticsWorkspace() {
       });
       return;
     }
-    setAudioFiles(map);
     setAdoptedFolderLevels(
-      folderAttributeCandidates(map)
+      folderAttributeCandidates(new Map([...membership, ...map]))
         .slice(0, MAX_FOLDER_LEVELS)
         .map(({ level }) => level),
     );
@@ -1492,6 +1495,10 @@ function DiagnosticsWorkspace() {
                         aria-label="音声の取り込み前確認"
                       >
                         <h3>取り込み前の確認</h3>
+                        <p>音声本体 {(Array.from(new Set(pendingAudio.files.values())).reduce((sum, file) => sum + file.size, 0) / 1024 ** 2).toFixed(1)} MiB。
+                          全量保存はCSV・調査状態も含め1分析{policy.maxBundleMiB} MiB、保存全体{policy.maxTotalMiB} MiBまでです。
+                          {active!.record.audioReferences !== undefined ? ' この分析は軽量保存です。音声本体を複製せず、再開時に選び直します。' : ' 大容量音声には軽量保存を選んでください。'}</p>
+                        {active!.record.audioReferences === undefined && active!.source && <Button variant="outline" disabled={!!operation} onClick={() => void controller.saveAsReference().catch(error => setMessage({ error: true, text: error instanceof Error ? error.message : '軽量保存できません。' }))}>現在の調査を軽量保存にコピー</Button>}
                         <p>
                           {pendingAudio.incoming.length}件のWAVを選択。対応{' '}
                           {previewAudit.matched}行、未対応{' '}

@@ -15,6 +15,7 @@ import {
 } from './metadata.ts';
 import {
   LIMITS,
+  audioReferencesValue,
   StorageError,
   datasetValue,
   encodeJSON,
@@ -73,6 +74,7 @@ function recordValue(value: unknown): SessionRecord {
         'source',
         'datasetHash',
         'bundleBytes',
+        'audioReferences',
       ],
       [
         'id',
@@ -148,6 +150,9 @@ function recordValue(value: unknown): SessionRecord {
       ...value,
       state: stateValue(value.state),
       audio,
+      ...(value.audioReferences === undefined
+        ? {}
+        : { audioReferences: audioReferencesValue(value.audioReferences) }),
       ...(value.source === undefined ? {} : { source: asset(value.source) }),
     } as SessionRecord;
   } catch (error) {
@@ -189,8 +194,7 @@ function checkFile(file: File, maximum: number) {
 
 function audioInput(files: Map<string, File> | undefined): Map<string, File> {
   if (files === undefined) return new Map();
-  if (!(files instanceof Map))
-    fail('音声対応はMapにしてください。');
+  if (!(files instanceof Map)) fail('音声対応はMapにしてください。');
   for (const [key, file] of files) {
     if (!string(key, '音声対応キー', 4096)) fail('音声対応キーが空です。');
     checkFile(file, LIMITS.assetBytes);
@@ -373,6 +377,12 @@ export async function createBrowserRepository(
     try {
       const value = datasetValue(loaded.dataset.value);
       if (
+        !!value.externalCSV !== (record.audioReferences !== undefined) ||
+        (value.externalCSV &&
+          (record.source || Object.keys(record.audio).length))
+      )
+        fail('軽量保存の入力参照が不正です。');
+      if (
         loaded.dataset.id !== record.datasetVersionId ||
         loaded.dataset.hash !== record.datasetHash ||
         (await sha256(encodeJSON(value))) !== record.datasetHash
@@ -433,6 +443,15 @@ export async function createBrowserRepository(
     const datasetValueCopy = datasetValue(input.dataset);
     const state = stateValue(input.state);
     const audio = audioInput(input.audioFiles);
+    const references =
+      input.audioReferences === undefined
+        ? undefined
+        : audioReferencesValue(input.audioReferences);
+    if (
+      !!datasetValueCopy.externalCSV !== (references !== undefined) ||
+      (references && (input.source || audio.size))
+    )
+      fail('軽量保存には元データ・音声本体を含められません。');
     if (input.source) checkFile(input.source, LIMITS.sourceBytes);
     const prepared = await prepare([
       ...(input.source ? [input.source] : []),
@@ -455,6 +474,7 @@ export async function createBrowserRepository(
       audio: {},
       datasetHash: dataset.hash,
       bundleBytes: 0,
+      ...(references === undefined ? {} : { audioReferences: references }),
     };
     // Check the final manifest budget with temporary, never persisted references.
     const temporary = (file: File) =>
@@ -511,6 +531,10 @@ export async function createBrowserRepository(
         const operationId = string(input.operationId, '操作ID', 256);
         if (!operationId) fail('操作IDを指定してください。');
         const state = stateValue(input.state);
+        const references =
+          input.audioReferences === undefined
+            ? undefined
+            : audioReferencesValue(input.audioReferences);
         const audio =
           input.audioFiles === undefined
             ? undefined
@@ -529,10 +553,19 @@ export async function createBrowserRepository(
             expectedRevision: input.expectedRevision,
             state,
             audio: audioDigest,
+            ...(references === undefined
+              ? {}
+              : { audioReferences: references }),
           }),
         );
         const key = JSON.stringify([id, operationId]);
         const { record: current, dataset } = await checked(id);
+        if (
+          dataset.value.externalCSV
+            ? input.audioFiles !== undefined
+            : references !== undefined
+        )
+          fail('保存方式と音声入力が一致しません。');
         const previous = await metadata.operation(key);
         if (previous) {
           if (previous.digest !== digest)
@@ -556,6 +589,7 @@ export async function createBrowserRepository(
           state,
           revision: current.revision + 1,
           updatedAt: new Date().toISOString(),
+          ...(references === undefined ? {} : { audioReferences: references }),
         };
         if (audio)
           next.audio = Object.fromEntries(
