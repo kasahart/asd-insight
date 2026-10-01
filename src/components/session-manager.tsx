@@ -39,7 +39,7 @@ export function SessionManager({ open, onClose }: { open: boolean; onClose: () =
     const view = active?.record.state ?? {};
     const state = initialWorkspaceState(candidate);
     for (const key of ['disclosures','audioPreferences','inspectorWidth','spectrogramPreferences']) if (view[key] !== undefined) state[key] = view[key];
-    await controller.create({ title: candidate.dataset.name, dataset: candidate.dataset, source: candidate.source, state }, reference);
+    await controller.create({ title: candidate.dataset.name, dataset: candidate.dataset, source: candidate.source, state }, reference && !candidate.dataset.demo);
   }
   const candidate = importer.csvCandidate;
   const disabled = !!busy || !!importer.busy;

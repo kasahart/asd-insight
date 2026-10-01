@@ -25,6 +25,77 @@ function wav() {
   return bytes;
 }
 
+test('タブ切替時のCSV軽量保存選択を保ち、合成デモには適用しない', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'データを選ぶ', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'データと保存した分析' });
+  await dialog.getByRole('radio', { name: /軽量保存：/ }).check();
+  await dialog.getByRole('button', { name: '合成デモ', exact: true }).click();
+  await dialog.getByRole('button', { name: 'CSV・TSV', exact: true }).click();
+  await expect(dialog.getByRole('radio', { name: /軽量保存：/ })).toBeChecked();
+  await dialog.getByRole('button', { name: '合成デモ', exact: true }).click();
+  await dialog
+    .getByRole('button', { name: '合成デモを表示', exact: true })
+    .click();
+  await expect(dialog).not.toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'demo_inspection.csv', exact: true }),
+  ).toBeVisible();
+  await expect(page.locator('main.main-panel')).toHaveAttribute(
+    'aria-busy',
+    'false',
+  );
+  await expect(
+    page.getByRole('button', { name: /保存状態と分析を管理/ }),
+  ).toContainText('端末に保存済み');
+
+  await page.getByRole('button', { name: 'データを選ぶ', exact: true }).click();
+  await dialog.getByRole('button', { name: 'CSV・TSV', exact: true }).click();
+  await dialog.getByRole('radio', { name: /軽量保存：/ }).check();
+  await dialog.locator('input[accept=".csv,.tsv"]').setInputFiles(csvFile);
+  await dialog
+    .getByRole('button', { name: 'このデータを表示', exact: true })
+    .click();
+  await expect(
+    page.getByRole('heading', { name: 'reference.csv', exact: true }),
+  ).toBeVisible();
+  await expect(page.locator('.save-notification')).toContainText(
+    '軽量保存：CSV・音声本体は含まれません',
+  );
+  await expect(
+    page.getByRole('button', { name: /保存状態と分析を管理/ }),
+  ).toContainText('端末に保存済み');
+
+  await page.reload();
+  await page.getByRole('button', { name: 'データを選ぶ', exact: true }).click();
+  const saved = dialog.getByRole('region', { name: '保存した分析' });
+  await saved
+    .getByRole('listitem')
+    .filter({ hasText: 'demo_inspection.csv' })
+    .getByRole('button', { name: '開く', exact: true })
+    .click();
+  await expect(dialog).not.toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'demo_inspection.csv', exact: true }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'データを選ぶ', exact: true }).click();
+  await saved
+    .getByRole('listitem')
+    .filter({ hasText: 'reference.csv' })
+    .getByRole('button', { name: '開く', exact: true })
+    .click();
+  await expect(
+    dialog.getByRole('region', { name: '軽量保存の再開' }),
+  ).toBeVisible();
+  await dialog.locator('input[accept=".csv,.tsv"]').setInputFiles(csvFile);
+  await expect(dialog).not.toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'reference.csv', exact: true }),
+  ).toBeVisible();
+});
+
 test('軽量保存は元CSVを照合し、欠けた音声があっても階層条件・メモ・除外履歴を復元する', async ({
   page,
 }, testInfo) => {
