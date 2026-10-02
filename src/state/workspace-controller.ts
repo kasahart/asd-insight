@@ -9,6 +9,7 @@ import {
   MAX_FOLDER_LEVELS,
   folderAttributeColumn,
 } from '../../packages/domain/audio-import.ts';
+import { resolveAudio } from '../../packages/domain/data.ts';
 import {
   encodeJSON,
   sha256,
@@ -17,6 +18,7 @@ import {
   audioReferences,
   inputMembership,
   logicalDatasetHash,
+  retainedReferenceAudio,
 } from './input-references.ts';
 
 export type SaveStatus = 'saved' | 'unsaved' | 'saving' | 'error';
@@ -182,7 +184,30 @@ export class WorkspaceController {
       throw new Error('音声対応の形式が不正です。');
     const previous = this.snapshot.active.audioFiles;
     const references = this.snapshot.active.record.audioReferences;
-    if (references) audioReferences(files, references);
+    if (references) {
+      const nextReferences = audioReferences(files, references);
+      if (references.length && nextReferences.length > references.length) {
+        // New paths may share a basename, but cannot replace/ambiguate a saved row binding.
+        const before = new Map(references.map((ref) => [ref.key, ref]));
+        const after = new Map(nextReferences.map((ref) => [ref.key, ref]));
+        const state = this.snapshot.active.record.state;
+        const idColumn =
+          typeof state.idColumn === 'string' ? state.idColumn : '';
+        const audioColumn =
+          typeof state.audioColumn === 'string' ? state.audioColumn : '';
+        this.snapshot.active.dataset.rows.forEach((row, index) => {
+          const saved = resolveAudio(row, index, idColumn, audioColumn, before);
+          if (
+            saved.key &&
+            resolveAudio(row, index, idColumn, audioColumn, after).key !==
+              saved.key
+          )
+            throw new Error(
+              `音声の追加で行${index + 1}の保存済み対応「${saved.key}」が変わります。CSVの音声列に相対パスを指定して、新しい分析として開始してください。`,
+            );
+        });
+      }
+    }
     validateApplicationState(
       this.snapshot.active.record.state,
       this.snapshot.active.dataset.rows.length,
@@ -610,7 +635,14 @@ export class WorkspaceController {
         );
       this.activate(
         loaded.dataset.externalCSV
-          ? { ...active, record: loaded.record }
+          ? {
+              ...active,
+              record: loaded.record,
+              audioFiles: retainedReferenceAudio(
+                active.audioFiles,
+                loaded.record.audioReferences!,
+              ),
+            }
           : loaded,
       );
       await this.refreshAfterCommit();

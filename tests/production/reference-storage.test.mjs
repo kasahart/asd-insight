@@ -8,6 +8,7 @@ import {
 } from '../../src/state/input-references.ts';
 import { withFolderAttributes } from '../../packages/domain/audio-import.ts';
 import { datasetRows } from '../../packages/domain/dataset-rows.ts';
+import { findAudio } from '../../packages/domain/data.ts';
 import {
   deferred,
   fixture,
@@ -142,12 +143,27 @@ test('changed CSV and changed audio metadata cannot replace saved investigation;
     /保存時と異なります/,
   );
   assert.equal(controller.getSnapshot().active.audioFiles.size, 0);
-  assert.throws(
-    () =>
-      controller.updateAudio(
-        new Map([['a.wav', input.audioFiles.get('A/a.wav')]]),
-      ),
-    /相対パスが保存時と異なります/,
+  // A distinct path adds a reference; it never replaces the original explicit CSV path.
+  controller.updateAudio(new Map([['a.wav', input.audioFiles.get('A/a.wav')]]));
+  await controller.flush();
+  assert.equal(
+    controller.getSnapshot().active.record.audioReferences.length,
+    3,
+  );
+  assert.ok(
+    controller
+      .getSnapshot()
+      .active.record.audioReferences.some((ref) => ref.key === 'A/a.wav'),
+  );
+  assert.equal(
+    findAudio(
+      input.dataset.rows[0],
+      0,
+      'id',
+      'audio_file',
+      controller.getSnapshot().active.audioFiles,
+    ),
+    undefined,
   );
   assert.equal(
     controller.getSnapshot().active.record.state.notes[1],
@@ -467,4 +483,191 @@ test('legacy references remain readable and mismatched logical identity metadata
   );
   await assert.rejects(repo.loadSession(modern.id), { code: 'CORRUPT' });
   assert.equal((await repo.loadSession(legacy.id)).record.id, legacy.id);
+});
+
+test('partial reference folders can add distinct paths sharing the same WAV basename', async (t) => {
+  const env = fixture();
+  const repo = await createBrowserRepository(env.options);
+  const controller = new WorkspaceController(repo, 60_000);
+  t.after(() => controller.dispose());
+  const input = inputs();
+  const rows = input.dataset.rows.map((row) => ({
+    ...row,
+    audio_file: row.group + '/sample.wav',
+  }));
+  const dataset = { ...input.dataset, rows };
+  const source = new File(
+    [
+      dataset.columns.join(',') +
+        '\n' +
+        rows
+          .map((row) => dataset.columns.map((c) => row[c]).join(','))
+          .join('\n'),
+    ],
+    dataset.name,
+  );
+  const first = new File(['first'], 'sample.wav', { lastModified: 11 });
+  const second = new File(['other recording'], 'sample.wav', {
+    lastModified: 22,
+  });
+  await controller.create(
+    {
+      ...input,
+      dataset,
+      source,
+      audioFiles: new Map([['A/sample.wav', first]]),
+    },
+    true,
+  );
+  const original = controller.getSnapshot().active.record.audioReferences[0];
+  await controller.importBundle(await controller.exportBundle());
+  await controller.resumeReference(dataset, source);
+  controller.updateAudio(new Map([['B/sample.wav', second]]));
+  await controller.flush();
+  const active = controller.getSnapshot().active;
+  assert.equal(active.record.audioReferences.length, 2);
+  assert.deepEqual(
+    active.record.audioReferences.find((ref) => ref.key === 'A/sample.wav'),
+    original,
+  );
+  assert.equal(
+    findAudio(rows[0], 0, 'id', 'audio_file', active.audioFiles),
+    undefined,
+  );
+  assert.equal(
+    findAudio(rows[1], 1, 'id', 'audio_file', active.audioFiles),
+    second,
+  );
+  assert.deepEqual(
+    datasetRows(
+      withFolderAttributes(
+        active.dataset,
+        'id',
+        'audio_file',
+        inputMembership(active),
+        [1],
+      ),
+    ).map((row) => row['WAVフォルダ階層1']),
+    ['A', 'B'],
+  );
+  controller.updateAudio(
+    new Map([
+      ['A/sample.wav', first],
+      ['B/sample.wav', second],
+    ]),
+  );
+  await controller.flush();
+  assert.equal(controller.getSnapshot().active.audioFiles.size, 2);
+  assert.equal(
+    (await repo.loadSession(active.record.id)).record.audioReferences.length,
+    2,
+  );
+  assert.equal(
+    controller.getSnapshot().active.record.state.notes[1],
+    '調査メモ',
+  );
+  assert.equal(env.files().length, 0);
+});
+
+test('discarding a conflicting reference draft drops unmatched/unsaved WAVs and keeps matching saved bindings', async (t) => {
+  const env = fixture();
+  const firstRepo = await createBrowserRepository(env.options);
+  const first = new WorkspaceController(firstRepo, 60_000);
+  const input = inputs();
+  const stable = input.audioFiles.get('B/b.wav');
+  await first.create(
+    { ...input, audioFiles: new Map([['B/b.wav', stable]]) },
+    true,
+  );
+  const id = first.getSnapshot().active.record.id;
+  const secondRepo = await createBrowserRepository(env.options);
+  const second = new WorkspaceController(secondRepo, 60_000);
+  t.after(() => {
+    first.dispose();
+    second.dispose();
+  });
+  await second.open(id);
+  await second.resumeReference(input.dataset, input.source);
+  const saved = new File(['saved recording'], 'a.wav', { lastModified: 10 });
+  const conflicting = new File(['different local recording'], 'a.wav', {
+    lastModified: 20,
+  });
+  const extra = new File(['unsaved'], 'extra.wav', { lastModified: 30 });
+  first.updateAudio(
+    new Map([
+      ['A/a.wav', saved],
+      ['B/b.wav', stable],
+    ]),
+  );
+  first.setState('notes', { 1: 'saved in first tab' });
+  second.updateAudio(
+    new Map([
+      ['A/a.wav', conflicting],
+      ['B/b.wav', stable],
+      ['C/extra.wav', extra],
+    ]),
+  );
+  second.setState('notes', { 1: 'discard this draft' });
+  await first.flush();
+  await assert.rejects(second.flush(), { code: 'CONFLICT' });
+  assert.equal(second.getSnapshot().conflict, true);
+  await second.reloadSaved();
+  const active = second.getSnapshot().active;
+  assert.equal(second.getSnapshot().status, 'saved');
+  assert.equal(second.getSnapshot().conflict, false);
+  assert.deepEqual([...active.audioFiles.keys()], ['B/b.wav']);
+  assert.equal(active.audioFiles.get('B/b.wav'), stable);
+  assert.equal(
+    findAudio(input.dataset.rows[0], 0, 'id', 'audio_file', active.audioFiles),
+    undefined,
+  );
+  assert.equal(active.record.state.notes[1], 'saved in first tab');
+  assert.equal(
+    active.record.audioReferences.find((ref) => ref.key === 'A/a.wav').size,
+    saved.size,
+  );
+  assert.ok(inputMembership(active).has('A/a.wav'));
+  assert.equal(
+    active.record.audioReferences.some((ref) => ref.key === 'C/extra.wav'),
+    false,
+  );
+  assert.equal(env.files().length, 0);
+});
+
+test('new paths cannot make a specifically saved basename row binding ambiguous', async (t) => {
+  const repo = await createBrowserRepository({ mode: 'memory' });
+  const controller = new WorkspaceController(repo, 60_000);
+  t.after(() => controller.dispose());
+  const input = inputs();
+  const rows = input.dataset.rows.map((row) => ({
+    ...row,
+    audio_file: row.audio_file.split('/').at(-1),
+  }));
+  const dataset = { ...input.dataset, rows };
+  const source = new File(
+    [
+      dataset.columns.join(',') +
+        '\n' +
+        rows
+          .map((row) => dataset.columns.map((c) => row[c]).join(','))
+          .join('\n'),
+    ],
+    dataset.name,
+  );
+  await controller.create({ ...input, dataset, source }, true);
+  await controller.importBundle(await controller.exportBundle());
+  await controller.resumeReference(dataset, source);
+  assert.throws(
+    () =>
+      controller.updateAudio(
+        new Map([['C/a.wav', new File(['other'], 'a.wav')]]),
+      ),
+    /保存済み対応/,
+  );
+  assert.equal(controller.getSnapshot().active.audioFiles.size, 0);
+  assert.equal(
+    controller.getSnapshot().active.record.audioReferences.length,
+    2,
+  );
+  assert.equal(controller.getSnapshot().status, 'saved');
 });

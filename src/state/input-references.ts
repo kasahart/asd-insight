@@ -29,13 +29,8 @@ export function audioReferences(
   previous: AudioReference[] = [],
 ): AudioReference[] {
   const refs = new Map(previous.map((ref) => [ref.key, ref]));
-  const expectedNames = new Set(previous.map((ref) => ref.name));
   for (const [key, file] of files) {
     const old = refs.get(key);
-    if (!old && expectedNames.has(file.name))
-      throw new Error(
-        `音声「${key}」の相対パスが保存時と異なります。元と同じ階層のフォルダを選び直してください。`,
-      );
     if (
       old &&
       (old.size !== file.size || old.lastModified !== file.lastModified)
@@ -51,4 +46,23 @@ export function audioReferences(
     });
   }
   return [...refs.values()];
+}
+
+/** Discard-draft reload keeps only local files described by the saved revision. */
+export function retainedReferenceAudio(
+  files: Map<string, File>,
+  references: AudioReference[],
+): Map<string, File> {
+  const saved = new Map(references.map((ref) => [ref.key, ref]));
+  return new Map(
+    [...files].filter(([key, file]) => {
+      const ref = saved.get(key);
+      return (
+        ref &&
+        ref.name === file.name &&
+        ref.size === file.size &&
+        ref.lastModified === file.lastModified
+      );
+    }),
+  );
 }
