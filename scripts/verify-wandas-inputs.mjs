@@ -19,7 +19,7 @@ for (const name of lock.pureWheels) {
 }
 py.FS.writeFile('/home/pyodide/wandas_adapter.py', await readFile(join(root, 'python/wandas_adapter.py')));
 py.runPython(await readFile(join(root, 'tests/production/adapter-laziness.py'), 'utf8'));
-console.log('PASS single header inspection, one PCM decode, zero PCM before guards, recovery');
+console.log('PASS header-only preflight, one PCM decode, zero Frame graphs and PCM before guards, recovery');
 py.runPython(String.raw`
 import os, tempfile
 from pathlib import Path
@@ -60,3 +60,20 @@ with tempfile.TemporaryDirectory() as folder:
             os.chdir(previous)
 `);
 console.log('PASS catalog/files ordering, duplicates, relative base after cwd change, string IDs, typed/missing metadata, snapshot, trim, broken/missing audio; small MEMFS only');
+
+py.runPython(String.raw`
+from io import BytesIO
+from scipy.signal import ShortTimeFFT, get_window
+stream=BytesIO(); sf.write(stream, np.zeros((4000,2)),8000,format="WAV")
+stream.seek(7)
+assert wd.inspect(stream)["frames"]==4000 and stream.tell()==7 and not stream.closed
+f=wd.from_numpy(np.zeros((2,4000)),8000).with_source_time_offset([2.0,3.0])
+for fft,hop,win in [(2048,512,2048),(9,2,7),(32,8,16)]:
+    s=f.stft(n_fft=fft,hop_length=hop,win_length=win)
+    oracle=ShortTimeFFT(get_window("hann",win,fftbins=True),hop,8000,mfft=fft).t(4000)
+    np.testing.assert_allclose(s.frame_center_times, np.array([2.0,3.0])[:,None]+oracle[None,:],atol=1e-14)
+    assert s.frame_time_origin==oracle[0]
+    sliced=s[:, :, 2:5]
+    np.testing.assert_allclose(sliced.frame_center_times,s.frame_center_times[:,2:5],atol=1e-14)
+`);
+console.log('PASS physical STFT centers, padding variants, multiple source offsets, contiguous slicing, borrowed stream position (real Pyodide)');

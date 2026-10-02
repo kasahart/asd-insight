@@ -67,7 +67,7 @@ export function validateAudioAnalysis(result: AudioAnalysis): AudioAnalysis {
     !/^[a-f0-9]{64}$/.test(result.runtimeLockHash) ||
     !/^[a-f0-9]{64}$/.test(result.sourceHash) ||
     result.recipe?.engine !== 'wandas' ||
-    result.recipe?.engineVersion !== '0.8.0' ||
+    result.recipe?.engineVersion !== '0.8.0+insightapi.1' ||
     result.recipe?.unit !== 'dBFS'
   ) {
     throw new Error(
