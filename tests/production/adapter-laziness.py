@@ -22,6 +22,7 @@ with patch.object(SoundFileReader, "get_file_info", wraps=SoundFileReader.get_fi
     for payload, message in [
         (wav(1000, 1, 181000), "180秒"),
         (wav(16000, 9, 100), "1〜8ch"),
+        (wav(16000, 1024, 1), "1〜8ch"),
         (wav(96000, 1, 96000 * 60), "メモリ上限"),
     ]:
         before = pcm.call_count
@@ -32,6 +33,6 @@ with patch.object(SoundFileReader, "get_file_info", wraps=SoundFileReader.get_fi
         else:
             raise AssertionError("guard did not reject")
         assert pcm.call_count == before, "guard decoded PCM"
-    assert header.call_count == info.call_count == 4
+    assert header.call_count == info.call_count == 5
     adapter.analyze_wav(wav(16000, 1, 100))
-    assert header.call_count == info.call_count == 5 and pcm.call_count == 2
+    assert header.call_count == info.call_count == 6 and pcm.call_count == 2
