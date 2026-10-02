@@ -863,7 +863,7 @@ test('changing audio identity or bindings drops only stale audio metadata before
       sampleRate: 16_000,
       channels: 1,
       duration: 1,
-      recipe: { engine: 'wandas', engineVersion: '0.7.2', unit: 'dBFS' },
+      recipe: { engine: 'wandas', engineVersion: '0.8.0', unit: 'dBFS' },
       runtimeLockHash: 'a'.repeat(64),
       sourceName: 's1.wav',
       sourceHash: 'b'.repeat(64),

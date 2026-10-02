@@ -11,7 +11,7 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 const encode = (value) => new TextEncoder().encode(value);
 const lock = {
   pyodideVersion: '314.0.3',
-  wandasVersion: '0.7.2',
+  wandasVersion: '0.8.0',
   nativePackages: [],
   pureWheels: [],
   assets: [{ path: 'core.wasm', sha256: 'a'.repeat(64) }],
@@ -243,7 +243,7 @@ test('Python argument/result proxies are released on success and on conversion f
           minDb: -100,
           maxDb: 0,
           sourceHash: 'b'.repeat(64),
-          recipe: { engine: 'wandas', engineVersion: '0.7.2', unit: 'dBFS' },
+          recipe: { engine: 'wandas', engineVersion: '0.8.0', unit: 'dBFS' },
         }),
         values: new Uint8Array(values.buffer),
         wave: new Uint8Array(wave.buffer),
