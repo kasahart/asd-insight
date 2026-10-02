@@ -6,6 +6,10 @@ import { Buffer } from 'node:buffer';
 test('100,001 WAVs: import, folder grouping, search, save and reopen without a count cap', async ({
   page,
 }) => {
+  test.skip(
+    process.env.OVERLAP_E2E_SCALE !== '1',
+    'Set OVERLAP_E2E_SCALE=1 for expensive scale tests',
+  );
   test.setTimeout(180_000);
   const count = 100_001;
   const errors: string[] = [];

@@ -23,6 +23,7 @@ import { addAudioAttachments } from '../../src/lib/audio-attachments.ts';
 import {
   derivedPopulationSignature,
   evaluationPopulationKey,
+  evaluationPopulationScopesMatch,
 } from '../../packages/domain/sample-review.ts';
 
 const file = (name) => ({ name });
@@ -529,4 +530,78 @@ test('batch addition keeps equal basenames in distinct folders and rejects dupli
   assert.equal(existing.size, 0);
   assert.throws(() => addAudioAttachments(added, [one]), /相対パスが重複/);
   assert.equal(added.size, 2);
+});
+
+test('stored evaluation scopes ignore object key ordering but still reject changed populations', () => {
+  for (const group of [
+    { kind: 'category', column: 'WAVフォルダ階層1', a: 'A', b: 'B' },
+    { kind: 'numeric', column: 'other_score', upperA: 0.2, lowerB: 0.8 },
+  ]) {
+    const parts = [
+      'dataset-hash',
+      'evaluation-v1',
+      'score',
+      group,
+      '',
+      '',
+      [0, 4],
+      'A',
+      'high',
+    ];
+    const original = evaluationPopulationKey(parts, '6:123:456');
+    // Browser storage recursively sorts state object keys, including the group.
+    const storedGroup = Object.fromEntries(
+      Object.keys(group)
+        .sort()
+        .map((key) => [key, group[key]]),
+    );
+    const reordered = evaluationPopulationKey(
+      [...parts.slice(0, 3), storedGroup, ...parts.slice(4)],
+      '6:123:456',
+    );
+    assert.notEqual(original, reordered);
+    assert.equal(evaluationPopulationScopesMatch(original, reordered), true);
+    assert.equal(evaluationPopulationScopesMatch(reordered, original), true);
+    for (const [index, value] of [
+      [0, 'other-dataset'],
+      [2, 'other-score'],
+      [6, [0, 5]],
+      [7, 'B'],
+      [8, 'low'],
+    ]) {
+      const changed = [...parts];
+      changed[index] = value;
+      assert.equal(
+        evaluationPopulationScopesMatch(
+          original,
+          evaluationPopulationKey(changed, '6:123:456'),
+        ),
+        false,
+      );
+    }
+    const changedGroup = [...parts];
+    changedGroup[3] = { ...group, column: 'other-column' };
+    assert.equal(
+      evaluationPopulationScopesMatch(
+        original,
+        evaluationPopulationKey(changedGroup, '6:123:456'),
+      ),
+      false,
+    );
+    assert.equal(
+      evaluationPopulationScopesMatch(
+        original,
+        evaluationPopulationKey(parts, '6:999:456'),
+      ),
+      false,
+    );
+    assert.equal(
+      evaluationPopulationScopesMatch(
+        original,
+        evaluationPopulationKey(parts, ''),
+      ),
+      false,
+    );
+    assert.equal(evaluationPopulationScopesMatch('not-json', original), false);
+  }
 });

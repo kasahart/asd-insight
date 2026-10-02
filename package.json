@@ -20,7 +20,8 @@
     "e2e:server": "npm run build && vite preview --host 127.0.0.1 --strictPort",
     "runtime:prepare": "python3 scripts/prepare-audio-runtime.py",
     "runtime:check": "python3 scripts/prepare-audio-runtime.py --check",
-    "test:audio": "node scripts/verify-audio-runtime.mjs"
+    "test:audio": "node scripts/verify-audio-runtime.mjs",
+    "e2e:scale": "OVERLAP_E2E_SCALE=1 playwright test tests/e2e/scale.spec.ts tests/e2e/reference-disk-scale.spec.ts"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",

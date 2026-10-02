@@ -1,4 +1,4 @@
-import type { StorageDataset } from '../contracts/storage.ts';
+import type { AudioReference, StorageDataset } from '../contracts/storage.ts';
 
 export type StorageErrorCode =
   | 'UNAVAILABLE'
@@ -122,7 +122,11 @@ export function stateValue(value: unknown): Record<string, unknown> {
 
 export function datasetValue(value: unknown): StorageDataset {
   if (!plain(value)) fail('データ形式が不正です。');
-  exactKeys(value, ['name', 'columns', 'rows', 'demo']);
+  exactKeys(
+    value,
+    ['name', 'columns', 'rows', 'demo', 'externalCSV'],
+    ['name', 'columns', 'rows', 'demo'],
+  );
   const name = string(value.name, 'データ名');
   if (
     !name.trim() ||
@@ -139,13 +143,53 @@ export function datasetValue(value: unknown): StorageDataset {
     columns.some((column) => !column.trim())
   )
     fail('列は重複のない1〜128列にしてください。');
-  if (!value.rows.length)
-    fail('データ行が必要です。');
+  if (value.externalCSV !== undefined) {
+    const ref = value.externalCSV;
+    if (!plain(ref)) fail('元CSVの参照が不正です。');
+    exactKeys(
+      ref,
+      ['hash', 'size', 'rowCount', 'logicalDatasetHash'],
+      ['hash', 'size', 'rowCount'],
+    );
+    if (
+      (ref.logicalDatasetHash !== undefined &&
+        (typeof ref.logicalDatasetHash !== 'string' ||
+          !/^[a-f0-9]{64}$/.test(ref.logicalDatasetHash))) ||
+      typeof ref.hash !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(ref.hash) ||
+      !Number.isSafeInteger(ref.size) ||
+      (ref.size as number) < 0 ||
+      (ref.size as number) > LIMITS.sourceBytes ||
+      !Number.isSafeInteger(ref.rowCount) ||
+      (ref.rowCount as number) < 1 ||
+      value.rows.length ||
+      value.demo
+    )
+      fail('元CSVの参照が不正です。');
+    return {
+      name,
+      columns,
+      rows: [],
+      demo: false,
+      externalCSV: {
+        hash: ref.hash,
+        size: ref.size as number,
+        rowCount: ref.rowCount as number,
+        ...(ref.logicalDatasetHash === undefined
+          ? {}
+          : { logicalDatasetHash: ref.logicalDatasetHash as string }),
+      },
+    };
+  }
+  if (!value.rows.length) fail('データ行が必要です。');
   const columnSet = new Set(columns);
   const rows = value.rows.map((row) => {
     if (!plain(row)) fail('行形式が不正です。');
     const keys = Object.keys(row);
-    if (keys.length !== columns.length || keys.some((key) => !columnSet.has(key)))
+    if (
+      keys.length !== columns.length ||
+      keys.some((key) => !columnSet.has(key))
+    )
       fail('保存形式に未対応または欠落した項目があります。');
     return Object.fromEntries(
       columns.map((column) => [
@@ -158,6 +202,39 @@ export function datasetValue(value: unknown): StorageDataset {
   if (encodeJSON(dataset).byteLength > LIMITS.metadataBytes)
     fail('展開後データが保存上限を超えています。');
   return dataset;
+}
+
+export function audioReferencesValue(value: unknown): AudioReference[] {
+  if (!Array.isArray(value)) fail('音声参照が不正です。');
+  const keys = new Set<string>();
+  const result = value.map((entry) => {
+    if (!plain(entry)) fail('音声参照が不正です。');
+    exactKeys(entry, ['key', 'name', 'size', 'lastModified']);
+    const key = string(entry.key, '音声パス', 4096);
+    const name = string(entry.name, '音声名', 4096);
+    if (
+      !key ||
+      !name ||
+      keys.has(key) ||
+      key.split('/').some((part) => !part || part === '.' || part === '..') ||
+      key.includes('\\') ||
+      !Number.isSafeInteger(entry.size) ||
+      (entry.size as number) < 0 ||
+      !Number.isSafeInteger(entry.lastModified) ||
+      (entry.lastModified as number) < 0
+    )
+      fail('音声参照が不正・重複しています。');
+    keys.add(key);
+    return {
+      key,
+      name,
+      size: entry.size as number,
+      lastModified: entry.lastModified as number,
+    };
+  });
+  if (encodeJSON(result).byteLength > LIMITS.metadataBytes)
+    fail('音声参照の容量が上限を超えています。');
+  return result;
 }
 
 export async function sha256(

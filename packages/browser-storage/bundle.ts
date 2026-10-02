@@ -6,6 +6,7 @@ import type {
 } from '../contracts/storage.ts';
 import {
   LIMITS,
+  audioReferencesValue,
   StorageError,
   datasetValue,
   encodeJSON,
@@ -36,11 +37,14 @@ export function bundlePlan(record: SessionRecord, dataset: StorageDataset) {
   ).sort((a, b) => a.hash.localeCompare(b.hash));
   const metadata = {
     format: 'overlap-lab',
-    version: 1,
+    version: dataset.externalCSV ? 2 : 1,
     title: record.title,
     state: record.state,
     dataset,
     datasetHash: record.datasetHash,
+    ...(record.audioReferences === undefined
+      ? {}
+      : { audioReferences: record.audioReferences }),
     ...(record.source ? { source: portable(record.source) } : {}),
     audio: Object.entries(record.audio)
       .sort(([a], [b]) => a.localeCompare(b))
@@ -141,6 +145,7 @@ export async function readBundle(
         'source',
         'audio',
         'assets',
+        'audioReferences',
       ],
       [
         'format',
@@ -153,10 +158,23 @@ export async function readBundle(
         'assets',
       ],
     );
-    if (metadata.format !== 'overlap-lab' || metadata.version !== 1)
+    if (
+      metadata.format !== 'overlap-lab' ||
+      (metadata.version !== 1 && metadata.version !== 2)
+    )
       fail('未対応の復元bundleの版です。');
     const title = string(metadata.title, '調査名');
     const dataset = datasetValue(metadata.dataset);
+    const references =
+      metadata.audioReferences === undefined
+        ? undefined
+        : audioReferencesValue(metadata.audioReferences);
+    if (
+      metadata.version === 1
+        ? !!dataset.externalCSV || references !== undefined
+        : !dataset.externalCSV || references === undefined
+    )
+      fail('保存方式とバックアップ版が一致しません。');
     const state = stateValue(metadata.state);
     if ((await sha256(encodeJSON(dataset))) !== metadata.datasetHash)
       fail('データ内容とhashが一致しません。');
@@ -164,6 +182,11 @@ export async function readBundle(
       fail('復元資産の件数が不正です。');
     const source =
       metadata.source === undefined ? undefined : assetValue(metadata.source);
+    if (
+      dataset.externalCSV &&
+      (source || metadata.audio.length || metadata.assets.length)
+    )
+      fail('軽量保存に入力本体が含まれています。');
     if (source && source.size > LIMITS.sourceBytes)
       fail('元CSV/TSVが容量上限を超えています。');
     const audio = metadata.audio.map((item) => {
@@ -249,6 +272,7 @@ export async function readBundle(
       state,
       ...(source ? { source: file(source) } : {}),
       audioFiles: new Map(audio.map(({ key, asset }) => [key, file(asset)])),
+      ...(references === undefined ? {} : { audioReferences: references }),
     };
   } catch (error) {
     if (error instanceof StorageError && error.code === 'UNAVAILABLE')

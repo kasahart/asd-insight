@@ -9,6 +9,17 @@ import {
   MAX_FOLDER_LEVELS,
   folderAttributeColumn,
 } from '../../packages/domain/audio-import.ts';
+import { resolveAudio } from '../../packages/domain/data.ts';
+import {
+  encodeJSON,
+  sha256,
+} from '../../packages/browser-storage/validation.ts';
+import {
+  audioReferences,
+  inputMembership,
+  logicalDatasetHash,
+  retainedReferenceAudio,
+} from './input-references.ts';
 
 export type SaveStatus = 'saved' | 'unsaved' | 'saving' | 'error';
 export type WorkspaceSnapshot = {
@@ -18,6 +29,7 @@ export type WorkspaceSnapshot = {
   error: string;
   conflict: boolean;
   operation: string | null;
+  pendingResume?: LoadedSession | null;
 };
 
 type SaveAttempt = {
@@ -152,7 +164,7 @@ export class WorkspaceController {
       state,
       active.dataset.rows.length,
       active.dataset.columns,
-      [...active.audioFiles.keys()],
+      [...inputMembership(active).keys()],
     );
     this.version++;
     this.emit({
@@ -171,11 +183,41 @@ export class WorkspaceController {
     )
       throw new Error('音声対応の形式が不正です。');
     const previous = this.snapshot.active.audioFiles;
+    const references = this.snapshot.active.record.audioReferences;
+    if (references) {
+      const nextReferences = audioReferences(files, references);
+      if (references.length && nextReferences.length > references.length) {
+        // New paths may share a basename, but cannot replace/ambiguate a saved row binding.
+        const before = new Map(references.map((ref) => [ref.key, ref]));
+        const after = new Map(nextReferences.map((ref) => [ref.key, ref]));
+        const state = this.snapshot.active.record.state;
+        const idColumn =
+          typeof state.idColumn === 'string' ? state.idColumn : '';
+        const audioColumn =
+          typeof state.audioColumn === 'string' ? state.audioColumn : '';
+        this.snapshot.active.dataset.rows.forEach((row, index) => {
+          const saved = resolveAudio(row, index, idColumn, audioColumn, before);
+          if (
+            saved.key &&
+            resolveAudio(row, index, idColumn, audioColumn, after).key !==
+              saved.key
+          )
+            throw new Error(
+              `音声の追加で行${index + 1}の保存済み対応「${saved.key}」が変わります。CSVの音声列に相対パスを指定して、新しい分析として開始してください。`,
+            );
+        });
+      }
+    }
     validateApplicationState(
       this.snapshot.active.record.state,
       this.snapshot.active.dataset.rows.length,
       this.snapshot.active.dataset.columns,
-      [...files.keys()],
+      [
+        ...new Set([
+          ...(references ?? []).map((ref) => ref.key),
+          ...files.keys(),
+        ]),
+      ],
     );
     if (
       files.size === previous.size &&
@@ -239,7 +281,14 @@ export class WorkspaceController {
             operationId: crypto.randomUUID(),
             state: structuredClone(active.record.state),
             ...(this.audioVersion !== this.savedAudioVersion
-              ? { audioFiles: new Map(active.audioFiles) }
+              ? active.record.audioReferences !== undefined
+                ? {
+                    audioReferences: audioReferences(
+                      active.audioFiles,
+                      active.record.audioReferences,
+                    ),
+                  }
+                : { audioFiles: new Map(active.audioFiles) }
               : {}),
           },
         };
@@ -273,7 +322,7 @@ export class WorkspaceController {
           record.state,
           current.dataset.rows.length,
           current.dataset.columns,
-          [...current.audioFiles.keys()],
+          [...inputMembership({ ...current, record }).keys()],
         );
         this.savedVersion = attempt.version;
         this.savedAudioVersion = attempt.audioVersion;
@@ -282,7 +331,17 @@ export class WorkspaceController {
         this.emit({
           active: {
             ...current,
-            record: { ...record, state: current.record.state },
+            record: {
+              ...record,
+              state: current.record.state,
+              ...(record.audioReferences === undefined
+                ? {}
+                : {
+                    audioReferences:
+                      attempt.input.audioReferences ??
+                      current.record.audioReferences,
+                  }),
+            },
           },
           sessions: this.snapshot.sessions.map((entry) =>
             entry.id === record.id ? record : entry,
@@ -313,14 +372,20 @@ export class WorkspaceController {
       loaded.record.state,
       loaded.dataset.rows.length,
       loaded.dataset.columns,
-      [...loaded.audioFiles.keys()],
+      [...inputMembership(loaded).keys()],
     );
     clearTimeout(this.timer);
     this.version = this.savedVersion = 0;
     this.audioVersion = this.savedAudioVersion = 0;
     this.attempt = null;
     this.errorKind = null;
-    this.emit({ active: loaded, status: 'saved', error: '', conflict: false });
+    this.emit({
+      active: loaded,
+      status: 'saved',
+      error: '',
+      conflict: false,
+      pendingResume: null,
+    });
   }
   private operation<T>(label: string, body: () => Promise<T>): Promise<T> {
     const run = async () => {
@@ -342,7 +407,44 @@ export class WorkspaceController {
     this.operations = result.catch(() => undefined);
     return result;
   }
-  create(input: CreateSessionInput): Promise<void> {
+  private async referenceInput(
+    input: CreateSessionInput,
+    datasetIdentity?: string,
+  ): Promise<CreateSessionInput> {
+    if (!input.source || input.dataset.demo)
+      throw new Error('軽量保存には元CSV・TSVが必要です。');
+    return {
+      title: input.title,
+      dataset: {
+        name: input.dataset.name,
+        columns: input.dataset.columns,
+        rows: [],
+        demo: false,
+        externalCSV: {
+          hash: await sha256(await input.source.arrayBuffer()),
+          size: input.source.size,
+          rowCount: input.dataset.rows.length,
+          // Reuse a persisted identity when copying; fresh CSV rows are in column order.
+          logicalDatasetHash:
+            datasetIdentity ??
+            (await sha256(
+              encodeJSON({
+                name: input.dataset.name,
+                columns: input.dataset.columns,
+                rows: input.dataset.rows,
+                demo: input.dataset.demo,
+              }),
+            )),
+        },
+      },
+      state: input.state,
+      audioReferences: audioReferences(
+        input.audioFiles ?? new Map(),
+        input.audioReferences,
+      ),
+    };
+  }
+  create(input: CreateSessionInput, reference = false): Promise<void> {
     return this.operation('create', async () => {
       validateApplicationState(
         input.state,
@@ -352,8 +454,18 @@ export class WorkspaceController {
       );
       await this.flush();
       this.alive();
-      const record = await this.repository.createSession(input);
-      const loaded = await this.repository.loadSession(record.id);
+      const record = await this.repository.createSession(
+        reference ? await this.referenceInput(input) : input,
+      );
+      const stored = await this.repository.loadSession(record.id);
+      const loaded = reference
+        ? {
+            ...stored,
+            dataset: input.dataset,
+            source: input.source,
+            audioFiles: input.audioFiles ?? new Map<string, File>(),
+          }
+        : stored;
       validateApplicationState(
         loaded.record.state,
         loaded.dataset.rows.length,
@@ -371,6 +483,12 @@ export class WorkspaceController {
       await this.flush();
       this.alive();
       const loaded = await this.repository.loadSession(id);
+      if (loaded.dataset.externalCSV) {
+        this.validateReference(loaded);
+        await this.flush();
+        this.emit({ pendingResume: loaded });
+        return;
+      }
       validateApplicationState(
         loaded.record.state,
         loaded.dataset.rows.length,
@@ -382,6 +500,87 @@ export class WorkspaceController {
       await this.refreshAfterCommit();
     });
   }
+  private validateReference(loaded: LoadedSession) {
+    validateApplicationState(
+      loaded.record.state,
+      loaded.dataset.externalCSV!.rowCount,
+      loaded.dataset.columns,
+      [...inputMembership(loaded).keys()],
+    );
+  }
+  cancelResume() {
+    this.emit({ pendingResume: null });
+  }
+  resumeReference(
+    dataset: LoadedSession['dataset'],
+    source: File,
+  ): Promise<void> {
+    return this.operation('resume', async () => {
+      const pending = this.snapshot.pendingResume;
+      if (!pending?.dataset.externalCSV)
+        throw new Error('再開する分析を選んでください。');
+      const expected = pending.dataset.externalCSV;
+      if (
+        source.size !== expected.size ||
+        (await sha256(await source.arrayBuffer())) !== expected.hash ||
+        dataset.rows.length !== expected.rowCount ||
+        JSON.stringify(dataset.columns) !==
+          JSON.stringify(pending.dataset.columns)
+      )
+        throw new Error(
+          '選択したCSVの内容が保存時と異なります。元のCSVを選び直してください。変更されたCSVは新しい分析として開始できます。',
+        );
+      await this.flush();
+      this.alive();
+      // Fetch the current revision after the user has selected inputs; another tab may have edited it.
+      const latest = await this.repository.loadSession(pending.record.id);
+      this.validateReference(latest);
+      if (latest.dataset.externalCSV?.hash !== expected.hash)
+        throw new Error(
+          '元CSVの参照が更新されています。分析を開き直してください。',
+        );
+      await this.flush();
+      this.activate({
+        ...latest,
+        dataset: { ...dataset, name: latest.dataset.name },
+        source,
+        audioFiles: new Map(),
+      });
+      await this.refreshAfterCommit();
+    });
+  }
+  saveAsReference(): Promise<void> {
+    return this.operation('reference', async () => {
+      if (this.saving) await this.saving.catch(() => {});
+      const active = this.snapshot.active;
+      if (!active) throw new Error('分析を選んでください。');
+      const version = this.version;
+      const input = await this.referenceInput(
+        {
+          title: active.record.title.slice(0, 1000) + '（軽量保存）',
+          dataset: active.dataset,
+          source: active.source,
+          state: active.record.state,
+          audioFiles: active.audioFiles,
+          audioReferences: active.record.audioReferences,
+        },
+        logicalDatasetHash(active.record),
+      );
+      const record = await this.repository.createSession(input);
+      this.alive();
+      if (
+        this.version !== version ||
+        this.snapshot.active?.record.id !== active.record.id
+      ) {
+        await this.refreshAfterCommit();
+        throw new Error(
+          '軽量保存を作成しましたが、その間の追加編集は元の画面に残っています。',
+        );
+      }
+      this.activate({ ...active, record });
+      await this.refreshAfterCommit();
+    });
+  }
   saveAsCopy(): Promise<void> {
     return this.operation('copy', async () => {
       if (this.saving) await this.saving.catch(() => {});
@@ -389,14 +588,24 @@ export class WorkspaceController {
       const active = this.snapshot.active;
       if (!active) return;
       const version = this.version;
-      const record = await this.repository.createSession({
+      const input: CreateSessionInput = {
         title: active.record.title.slice(0, 1000) + '（編集のコピー）',
         dataset: active.dataset,
         ...(active.source ? { source: active.source } : {}),
         audioFiles: active.audioFiles,
         state: active.record.state,
-      });
-      const loaded = await this.repository.loadSession(record.id);
+        audioReferences: active.record.audioReferences,
+      };
+      const record = await this.repository.createSession(
+        active.record.audioReferences !== undefined
+          ? await this.referenceInput(input, logicalDatasetHash(active.record))
+          : input,
+      );
+      const stored = await this.repository.loadSession(record.id);
+      const loaded =
+        active.record.audioReferences !== undefined
+          ? { ...active, record: stored.record }
+          : stored;
       this.alive();
       if (
         this.version !== version ||
@@ -424,7 +633,18 @@ export class WorkspaceController {
         throw new Error(
           '読み込み中に追加の編集がありました。編集を保持して、開き直しを中止しました。',
         );
-      this.activate(loaded);
+      this.activate(
+        loaded.dataset.externalCSV
+          ? {
+              ...active,
+              record: loaded.record,
+              audioFiles: retainedReferenceAudio(
+                active.audioFiles,
+                loaded.record.audioReferences!,
+              ),
+            }
+          : loaded,
+      );
       await this.refreshAfterCommit();
     });
   }
@@ -435,6 +655,8 @@ export class WorkspaceController {
       const isActive = id === this.snapshot.active?.record.id;
       if (isActive) await this.flush();
       this.alive();
+      if (this.snapshot.pendingResume?.record.id === id)
+        this.emit({ pendingResume: null });
       const version = this.version;
       // Own autosave can have advanced the revision since confirmation opened.
       const expected = isActive
@@ -501,12 +723,14 @@ export class WorkspaceController {
       const loaded = await this.repository.importBundle(blob);
       this.alive();
       try {
-        validateApplicationState(
-          loaded.record.state,
-          loaded.dataset.rows.length,
-          loaded.dataset.columns,
-          [...loaded.audioFiles.keys()],
-        );
+        if (loaded.dataset.externalCSV) this.validateReference(loaded);
+        else
+          validateApplicationState(
+            loaded.record.state,
+            loaded.dataset.rows.length,
+            loaded.dataset.columns,
+            [...loaded.audioFiles.keys()],
+          );
       } catch (error) {
         try {
           await this.repository.deleteSession(
@@ -523,7 +747,8 @@ export class WorkspaceController {
         throw error;
       }
       await this.flush();
-      this.activate(loaded);
+      if (loaded.dataset.externalCSV) this.emit({ pendingResume: loaded });
+      else this.activate(loaded);
       await this.refreshAfterCommit();
     });
   }
@@ -1026,8 +1251,7 @@ export function validateApplicationState(
       state.tableColumnVisibility,
       'tableColumnVisibility',
     );
-    if (Object.keys(visibility).length > 4096)
-      invalid('tableColumnVisibility');
+    if (Object.keys(visibility).length > 4096) invalid('tableColumnVisibility');
     for (const [id, visible] of Object.entries(visibility)) {
       tableColumnId(id, 'tableColumnVisibility');
       bool(visible, 'tableColumnVisibility');

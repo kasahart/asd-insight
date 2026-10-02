@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo, useSyncExternalStore, type ReactNode } from 'react';
 import { AudioLines, BookOpen, Database, Download, ShieldCheck } from 'lucide-react';
 import { createBrowserRepository, type BrowserRepository } from '@storage/index';
 import { WorkspaceController } from '@/state/workspace-controller';
@@ -136,10 +136,10 @@ export function WorkspaceActions() {
     catch (e) { setMessage(e instanceof Error ? e.message : 'バックアップできません。'); }
     finally { operationGate.current = false; setWorking(false); }
   }
-  async function copy() {
+  async function copy(reference = false) {
     if (operationGate.current) return;
     operationGate.current = true; setWorking(true);
-    try { await controller.saveAsCopy(); }
+    try { if (reference) await controller.saveAsReference(); else await controller.saveAsCopy(); }
     catch(e) { setMessage(e instanceof Error ? e.message : 'コピーを保存できません。'); }
     finally { operationGate.current = false; setWorking(false); }
   }
@@ -156,6 +156,9 @@ export function WorkspaceActions() {
             ? '保存できません'
             : '未保存の変更';
   const saveStateKey = conflict ? 'conflict' : mode === 'memory' ? 'memory' : status;
+  const references = active?.record.audioReferences;
+  const audioFiles = active?.audioFiles;
+  const missing = useMemo(() => references?.filter(ref => !audioFiles?.has(ref.key)).length ?? 0, [references, audioFiles]);
   return <>
     <div className="header-actions">
       <ManualLink />
@@ -165,9 +168,11 @@ export function WorkspaceActions() {
       {policy.downloads && <Button variant="outline" disabled={!active || working} onClick={() => void backup()}><Download size={14}/>バックアップ</Button>}
       <Button variant="outline" onClick={openManager}><Database size={14}/>データを選ぶ</Button>
     </div>
+    {active?.record.audioReferences !== undefined && <output className="save-notification"><span>軽量保存：CSV・音声本体は含まれません。再開時は元CSVを選び直します。{missing > 0 ? `音声${missing.toLocaleString()}件は未選択です。WAVフォルダを選び直すと再生できます。CSVの集計・調査状態は保持しています。` : '音声の再開時照合はパス・容量・更新日時で行い、内容の完全一致は保証しません。'}</span></output>}
     {(error || message) && <div className="save-notification" role={error ? 'alert' : 'status'}>
-      <span>{error || message}</span>
+      <span>{[error, message].filter(Boolean).join(' ' )}</span>
       {error && !conflict && <Button variant="outline" size="sm" onClick={() => void controller.flush().catch(() => {})}>保存を再試行</Button>}
+      {error && active?.source && active.record.audioReferences === undefined && <Button variant="outline" size="sm" disabled={working} onClick={() => void copy(true)}>調査状態を軽量保存にコピー</Button>}
       {conflict && <Button variant="outline" size="sm" disabled={working} onClick={() => void copy()}>編集を別の分析に保存</Button>}
       <Button variant="ghost" size="sm" onClick={openManager}>管理</Button>
       {!error && <Button variant="ghost" size="sm" onClick={() => setMessage('')}>閉じる</Button>}
