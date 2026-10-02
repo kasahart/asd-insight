@@ -56,6 +56,32 @@ export function evaluationPopulationKey(
   );
 }
 
+/** Stored JSON may reorder object keys without changing an evaluation population.
+ * Compare scopes structurally while retaining the existing persisted scope format.
+ * Array order and every value (including dataset/folder signatures) still matter.
+ */
+export function evaluationPopulationScopesMatch(
+  saved: string,
+  current: string,
+): boolean {
+  if (saved === current) return true;
+  const normalized = (scope: string) =>
+    JSON.stringify(JSON.parse(scope), (_key, value) =>
+      value && typeof value === 'object' && !Array.isArray(value)
+        ? Object.fromEntries(
+            Object.keys(value)
+              .sort()
+              .map((key) => [key, value[key]]),
+          )
+        : value,
+    );
+  try {
+    return normalized(saved) === normalized(current);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Compactly tracks only whether derived grouping/filter values change the
  * active comparison population. Other audio or folder changes keep the same

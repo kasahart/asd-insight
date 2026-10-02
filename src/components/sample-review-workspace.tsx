@@ -34,6 +34,7 @@ import {
 import {
   derivedPopulationSignature,
   evaluationPopulationKey,
+  evaluationPopulationScopesMatch,
   isClassificationFilter,
   type CandidateScope,
   type ReviewCounts,
@@ -307,18 +308,34 @@ export function SampleReviewWorkspace({
     ],
     derivedPopulation,
   );
-  const selection = setting?.scope === populationKey ? setting.selection : null;
+  const settingScope = setting?.scope ?? '';
+  const settingMatches = useMemo(
+    () => evaluationPopulationScopesMatch(settingScope, populationKey),
+    [settingScope, populationKey],
+  );
+  const decisionMatches = useMemo(
+    () => evaluationPopulationScopesMatch(decision.scope, populationKey),
+    [decision.scope, populationKey],
+  );
+  const selection = setting && settingMatches ? setting.selection : null;
   useEffect(() => {
-    if (setting && setting.scope !== populationKey) {
+    if (setting && !settingMatches) {
       setSetting(null);
       if (decision.filter !== 'ignored')
         setDecision({ filter: 'all', scope: '' });
     }
-  }, [populationKey, setting, decision.filter, setSetting, setDecision]);
+  }, [
+    populationKey,
+    setting,
+    settingMatches,
+    decision.filter,
+    setSetting,
+    setDecision,
+  ]);
   const filter =
     decision.filter === 'ignored'
       ? 'ignored'
-      : selection && decision.scope === populationKey
+      : selection && decisionMatches
         ? decision.filter
         : 'all';
   const histogramDomain =
