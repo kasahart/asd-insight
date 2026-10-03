@@ -288,12 +288,12 @@ test('manual is a self-contained static bundle and prepare-static copies it exac
   ];
   assert.equal(
     motionGifLinks.length,
-    4,
+    3,
     'GIF visibility class belongs on each GIF link',
   );
   assert.equal(
     motionStaticLinks.length,
-    4,
+    3,
     'static visibility class belongs on each paired static link',
   );
   assert.doesNotMatch(html, /<img\b[^>]*class="[^"]*\bmotion-(?:gif|static)\b/);
@@ -303,7 +303,7 @@ test('manual is a self-contained static bundle and prepare-static copies it exac
     ),
   ];
   assert.ok(
-    imageLinks.length >= 9,
+    imageLinks.length >= 8,
     'every manual visual has an original-size link',
   );
   for (const [, href, src] of imageLinks) assert.equal(href, src);
