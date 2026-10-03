@@ -67,6 +67,7 @@ export type IgnoredSample = {
 };
 export type ReviewEvent = IgnoredSample & { action: 'ignore' | 'restore' };
 export type SampleReviewState = {
+  audioPopulation: ReturnType<typeof audioPopulation<File>>;
   pending: boolean;
   workerResult: EvaluationResult | null;
   comparison: ComparisonState;
@@ -683,6 +684,7 @@ export function SampleReviewWorkspace({
     listingTotal,
     listingIgnoredTotal,
     ignoredIndices,
+    audioPopulation: population,
     selectedSample: lookup.get(selectedIndex ?? -1) ?? listed[0] ?? null,
     commonBins: distribution.bins.filter(
       (bin) => bin.countA > 0 && bin.countB > 0,

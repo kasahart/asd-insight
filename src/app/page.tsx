@@ -166,7 +166,7 @@ export function buildAnalysisReport(input: AnalysisReportInput) {
     : null;
   return {
     application: 'ASD Insight',
-    version: 6,
+    version: 7,
     createdAt,
     analysis: {
       id: record.id,
@@ -178,6 +178,22 @@ export function buildAnalysisReport(input: AnalysisReportInput) {
       name: data.name,
       demo: data.demo,
       rowCount: data.rows.length,
+      ...(!data.demo ? { audioPopulation: {
+        version: 1,
+        policy: review.audioPopulation.policy,
+        signature: review.audioPopulation.signature,
+        signatureAlgorithm: 'fnv1a32-pair-utf16-v1',
+        identityBoundary: 'Selected relative paths, source row positions, sizes and modification times; not a cryptographic audio-content identity',
+        inventoryCount: review.audioPopulation.inventory.length,
+        adoptedCount: review.audioPopulation.adopted.size,
+        withoutAttributesCount: review.audioPopulation.inventory.length - review.audioPopulation.adopted.size,
+        inventory: review.audioPopulation.inventory.map(({ key, file, rowIndex }) => ({ audioKey: key, rowIndex: rowIndex ?? null, bytes: file.size, lastModified: file.lastModified })),
+        excludedRows: {
+          missing: review.audioPopulation.missing.map(({ index }) => index),
+          ambiguous: review.audioPopulation.ambiguous.map(({ index, candidates }) => ({ rowIndex: index, candidates })),
+          duplicate: review.audioPopulation.duplicates.map(({ index, adoptedIndex, key }) => ({ rowIndex: index, adoptedRowIndex: adoptedIndex, audioKey: key })),
+        },
+      } } : {}),
       datasetVersionId: record.datasetVersionId,
       // datasetHash is the logical parsed-dataset hash.  A source asset hash,
       // when available, is kept separately so the two identities are clear.
@@ -254,6 +270,7 @@ export function buildAnalysisReport(input: AnalysisReportInput) {
         scoreMissingA: comparison.value.missingA,
         scoreMissingB: comparison.value.missingB,
         manual: comparison.value.ignoredRows,
+        audio: data.demo ? 0 : review.audioPopulation.excludedIndices.length,
       },
     },
     histogram: d.bins,

@@ -4,7 +4,7 @@
   "pythonVersion": "3.14.0",
   "wandasVersion": "0.8.0+insightapi.1",
   "upstreamHarness": "https://github.com/kasahart/wandas/blob/v0.8.0/scripts/run_pyodide_tests.mjs",
-  "upstreamCommit": "93cf5e78f244dd23ed1663ea41629895e7b66bca",
+  "upstreamCommit": "e151275ea63e7cae5e6c5136d1444c30e2efa81e",
   "nativePackages": [
     "attrs",
     "certifi",
@@ -298,8 +298,8 @@
     {
       "path": "wandas-0.8.0+insightapi.1-py3-none-any.whl",
       "url": "local-build:wandas-0.8.0+insightapi.1-py3-none-any.whl",
-      "sha256": "86f641e1da18ea50f0e3a2fd66fa7e3bde72681327b47cf4658b722f07e508ae",
-      "bytes": 281885,
+      "sha256": "233fb80537df74145e96945775651dd0d5cfd970fdec0ace55f2124d584d57a3",
+      "bytes": 281935,
       "component": "wandas",
       "version": "0.8.0+insightapi.1"
     },

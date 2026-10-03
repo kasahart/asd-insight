@@ -65,6 +65,12 @@ test('音源→CSV→対応確認→解析：次操作・0件保護・戻る・�
     await dialog.getByRole('radio', { name: /軽量保存：/ }).check();
     await next.click(); await expect(go).toBeEnabled(); await page.screenshot({ path: info.outputPath('02-confirm-before-analysis.png') });
     await go.dblclick(); await expect(dialog).not.toBeVisible(); await expect(targets(page)).toContainText('指標対象 2音源'); await saved(page);
+    await page.getByRole('button', { name: 'データを選ぶ', exact: true }).click();
+    await expect(dialog.getByRole('region', { name: '解析前の対応確認' })).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: '対応を確認', exact: true })).toBeDisabled();
+    await expect(dialog.getByRole('button', { name: 'CSV・TSVを選ぶ', exact: true })).toBeDisabled();
+    await page.keyboard.press('Escape');
+    await expect(targets(page)).toContainText('指標対象 2音源');
     await observation(info, { case: 'audio-first', wavFirst: true, csvGated: true, zeroBlocked: true, backKeptCSV: true, wrongFileRejected: true, doubleConfirmTargets: 2 });
   } finally { await Promise.all([half, full, bad].map(root => rm(root, { recursive: true, force: true }))); }
 });

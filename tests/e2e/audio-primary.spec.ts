@@ -74,6 +74,22 @@ test('音源を起点に最初のCSV行だけを採用し、未対応・曖昧�
     await expect(page.getByLabel('音源の指標対象件数')).toContainText(
       '指標対象 3音源',
     );
+    const provenance = page.locator('.analysis-provenance');
+    if (!(await provenance.evaluate((el: HTMLDetailsElement) => el.open))) await provenance.locator(':scope > summary').click();
+    const details = provenance.locator('.provenance-json-details');
+    if (!(await details.evaluate((el: HTMLDetailsElement) => el.open))) await details.locator(':scope > summary').click();
+    const report = JSON.parse(await page.locator('#analysis-provenance-json').inputValue());
+    expect(report.version).toBe(7);
+    expect(report.source.audioPopulation.policy).toBe('first-source-row-v1');
+    expect(report.source.audioPopulation.adoptedCount).toBe(3);
+    expect(report.source.audioPopulation.inventoryCount).toBe(5);
+    expect(report.source.audioPopulation.withoutAttributesCount).toBe(2);
+    expect(report.source.audioPopulation.excludedRows.missing).toEqual([3]);
+    expect(report.source.audioPopulation.excludedRows.ambiguous).toEqual([{ rowIndex: 4, candidates: expect.arrayContaining(['x/same.wav', 'y/same.wav']) }]);
+    expect(report.source.audioPopulation.excludedRows.duplicate).toEqual([{ rowIndex: 1, adoptedRowIndex: 0, audioKey: 'A/a.wav' }]);
+    expect(report.source.audioPopulation.inventory.find((item: { audioKey: string }) => item.audioKey === 'A/a.wav')).toMatchObject({ rowIndex: 0, bytes: wav().length });
+    expect(report.source.audioPopulation.signature).toMatch(/^3:/);
+    expect(report.summary.excluded.audio).toBe(3);
     await notice.getByText('対象外の元CSV行（3行）', { exact: true }).click();
     await expect(notice).toContainText('元CSV 2行目：重複・非採用');
     await expect(notice).toContainText('元CSV 1行目を採用');
@@ -92,10 +108,23 @@ test('音源を起点に最初のCSV行だけを採用し、未対応・曖昧�
     await expect(page.getByLabel('音源の指標対象件数')).not.toContainText(
       '指標対象 3音源',
     );
+    await expect(page.locator('main.main-panel')).toHaveAttribute('aria-busy', 'false');
     await page.locator('#audio-column').selectOption('audio_file');
     await expect(page.getByLabel('音源の指標対象件数')).toContainText(
       '指標対象 3音源',
     );
+    await writeFile(join(folder, 'missing.wav'), wav());
+    await page.locator('input[webkitdirectory]').setInputFiles(folder);
+    await page.getByRole('button', { name: '確認して追加', exact: true }).click();
+    await expect(page.getByLabel('音源の指標対象件数')).toContainText('指標対象 4音源');
+    await expect(page.locator('main.main-panel')).toHaveAttribute('aria-busy', 'false');
+    if (!(await provenance.evaluate((el: HTMLDetailsElement) => el.open))) await provenance.locator(':scope > summary').click();
+    if (!(await details.evaluate((el: HTMLDetailsElement) => el.open))) await details.locator(':scope > summary').click();
+    const supplementedReport = JSON.parse(await page.locator('#analysis-provenance-json').inputValue());
+    expect(supplementedReport.source.logicalDatasetHash).toBe(report.source.logicalDatasetHash);
+    expect(supplementedReport.source.audioPopulation.adoptedCount).toBe(4);
+    expect(supplementedReport.source.audioPopulation.signature).not.toBe(report.source.audioPopulation.signature);
+    expect(supplementedReport.summary.excluded.audio).toBe(2);
     await page.screenshot({ path: info.outputPath('audio-primary.png') });
   } finally {
     await rm(folder, { recursive: true, force: true });

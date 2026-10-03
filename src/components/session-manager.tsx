@@ -64,11 +64,12 @@ export function SessionManager({ open, onClose }: { open: boolean; onClose: () =
     if (open && !dialog.current?.open) dialog.current?.showModal();
     else if (!open && dialog.current?.open) dialog.current.close();
   }, [open]);
-  function close() { if (locked.current) return; cancelFolder(); importer.reset(); setInitialAudio(new Map()); setShowAudioReview(false); setMapping(null); dialog.current?.close(); onClose(); }
+  function resetStagedInputs() { cancelFolder(); importer.reset(); setInitialAudio(new Map()); setShowAudioReview(false); setMapping(null); }
+  function close() { if (locked.current) return; resetStagedInputs(); dialog.current?.close(); onClose(); }
   async function run(label: string, action: () => Promise<void>, finish = false) {
     if (locked.current) return;
     locked.current = true; setBusy(label); setMessage('');
-    try { await action(); if (finish && !controller.getSnapshot().pendingResume) { dialog.current?.close(); onClose(); } }
+    try { await action(); if (finish && !controller.getSnapshot().pendingResume) { resetStagedInputs(); dialog.current?.close(); onClose(); } }
     catch (error) { setMessage(error instanceof Error ? error.message : '操作を完了できませんでした。'); }
     finally { locked.current = false; setBusy(''); }
   }
