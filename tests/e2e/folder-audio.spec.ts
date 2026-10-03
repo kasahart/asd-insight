@@ -51,6 +51,7 @@ test('フォルダ読み取りAPIで相対パスを保持してWAVを取り込�
   }
   await start.click();
   const dialog = page.getByRole('dialog', { name: 'データと保存した分析' });
+  await dialog.getByRole('button', { name: 'CSV・TSV', exact: true }).click();
   await dialog.locator('input[type="file"][accept=".csv,.tsv"]').setInputFiles({
     name: 'picker.csv',
     mimeType: 'text/csv',
@@ -82,6 +83,7 @@ test('ドロップしたWAVフォルダを読み取り、取り込み前に対�
   }
   await start.click();
   const dialog = page.getByRole('dialog', { name: 'データと保存した分析' });
+  await dialog.getByRole('button', { name: 'CSV・TSV', exact: true }).click();
   await dialog.locator('input[type="file"][accept=".csv,.tsv"]').setInputFiles({
     name: 'dropped.csv',
     mimeType: 'text/csv',
@@ -181,6 +183,7 @@ test('階層WAVの自動属性化と一覧での対応状況', async ({ page }) 
     }
     await openData.click();
     const dialog = page.getByRole('dialog', { name: 'データと保存した分析' });
+  await dialog.getByRole('button', { name: 'CSV・TSV', exact: true }).click();
     await dialog
       .locator('input[type="file"][accept=".csv,.tsv"]')
       .setInputFiles({
@@ -328,6 +331,7 @@ test('2,000件を超えるWAVフォルダを取り込める', async ({
     }
     await openData.click();
     const dialog = page.getByRole('dialog', { name: 'データと保存した分析' });
+  await dialog.getByRole('button', { name: 'CSV・TSV', exact: true }).click();
     await dialog
       .locator('input[type="file"][accept=".csv,.tsv"]')
       .setInputFiles({
@@ -387,6 +391,7 @@ test('高カーディナリティの数値風フォルダ名は全てカテゴ�
     }
     await openData.click();
     const dialog = page.getByRole('dialog', { name: 'データと保存した分析' });
+  await dialog.getByRole('button', { name: 'CSV・TSV', exact: true }).click();
     await dialog
       .locator('input[type="file"][accept=".csv,.tsv"]')
       .setInputFiles({

@@ -102,6 +102,7 @@ test('軽量保存は元CSVを照合し、欠けた音声があっても階層�
   await page.goto('/');
   await page.getByRole('button', { name: 'データを選ぶ', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'データと保存した分析' });
+  await dialog.getByRole('button', { name: 'CSV・TSV', exact: true }).click();
   const csvInput = dialog.locator('input[accept=".csv,.tsv"]');
   await csvInput.setInputFiles(csvFile);
   await dialog.getByRole('radio', { name: /軽量保存：/ }).check();
@@ -236,6 +237,7 @@ test('全量から軽量保存へのコピー・再開後もしきい値と判�
   await page.goto('/');
   await page.getByRole('button', { name: 'データを選ぶ', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'データと保存した分析' });
+  await dialog.getByRole('button', { name: 'CSV・TSV', exact: true }).click();
   await dialog.locator('input[accept=".csv,.tsv"]').setInputFiles(csvFile);
   await dialog
     .getByRole('button', { name: 'このデータを表示', exact: true })

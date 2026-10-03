@@ -40,6 +40,7 @@ async function createReference(page: Page) {
   await page.goto('/');
   await page.getByRole('button', { name: 'データを選ぶ', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'データと保存した分析' });
+  await dialog.getByRole('button', { name: 'CSV・TSV', exact: true }).click();
   await dialog.getByRole('radio', { name: /軽量保存：/ }).check();
   await dialog.locator('input[accept=".csv,.tsv"]').setInputFiles(csvFile);
   await dialog

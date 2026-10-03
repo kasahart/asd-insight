@@ -85,6 +85,7 @@ test('100,001 WAVs: import, folder grouping, search, save and reopen without a c
   await page.goto('/');
   await page.getByRole('button', { name: 'データを選ぶ', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'データと保存した分析' });
+  await dialog.getByRole('button', { name: 'CSV・TSV', exact: true }).click();
   const csv =
     'audio_file,score,group\n' +
     Array.from(

@@ -62,6 +62,7 @@ async function openImportedCSV(page: Page) {
     name: 'データと保存した分析',
   });
   await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'CSV・TSV', exact: true }).click();
   return { mode, dialog };
 }
 

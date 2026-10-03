@@ -171,6 +171,7 @@ export async function referenceDiskWorkflow(
   await page.getByRole('button', { name: 'データを選ぶ', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'データと保存した分析' });
   if (audioFirst) await dialog.getByLabel('新規解析のWAVフォルダ', { exact: true }).setInputFiles(fixture.wavPath, { timeout: 180000 });
+  else await dialog.getByRole('button', { name: 'CSV・TSV', exact: true }).click();
   await dialog.getByRole('radio', { name: /軽量保存：/ }).check();
   await dialog
     .locator('input[accept=".csv,.tsv"]')

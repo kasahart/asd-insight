@@ -42,6 +42,7 @@ test('音源を起点に最初のCSV行だけを採用し、未対応・曖昧�
       .getByRole('button', { name: 'データを選ぶ', exact: true })
       .click();
     const dialog = page.getByRole('dialog', { name: 'データと保存した分析' });
+  await dialog.getByRole('button', { name: 'CSV・TSV', exact: true }).click();
     await dialog
       .locator('input[type=file][accept=".csv,.tsv"]')
       .setInputFiles({
