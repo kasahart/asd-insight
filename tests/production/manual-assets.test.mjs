@@ -108,7 +108,7 @@ test('manual is a self-contained static bundle and prepare-static copies it exac
   assert.doesNotMatch(html, /(?:https?:)?\/\//i);
   assert.match(html, /スコア<\/dt>[\s\S]*数値/);
   assert.match(html, /群分け<\/dt>[\s\S]*2値、または数値の境界/);
-  assert.match(html, /サンプル \/ 音声<\/dt>[\s\S]*任意/);
+  assert.match(html, /音声ファイル名・相対パス \/ ID<\/dt>[\s\S]*音源を一意に対応づける列/);
   assert.match(
     html,
     /参考・探索分析です[\s\S]*検査合否や運用しきい値の承認には使用しません/,
