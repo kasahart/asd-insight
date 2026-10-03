@@ -132,6 +132,8 @@ export async function referenceDiskWorkflow(
   root: string,
   count: number,
   folderGrouping = false,
+  audioFirst = false,
+  verifyFullReselection = false,
 ) {
   if (count > 100) page.setDefaultTimeout(120_000);
   const started = Date.now();
@@ -168,12 +170,14 @@ export async function referenceDiskWorkflow(
   await page.goto('/');
   await page.getByRole('button', { name: 'データを選ぶ', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'データと保存した分析' });
+  if (audioFirst) await dialog.getByLabel('新規解析のWAVフォルダ', { exact: true }).setInputFiles(fixture.wavPath, { timeout: 180000 });
   await dialog.getByRole('radio', { name: /軽量保存：/ }).check();
   await dialog
     .locator('input[accept=".csv,.tsv"]')
     .setInputFiles(fixture.csvPath);
+  if (audioFirst) await dialog.getByRole('button', { name: '対応を確認', exact: true }).click();
   await dialog
-    .getByRole('button', { name: 'このデータを表示', exact: true })
+    .getByRole('button', { name: audioFirst ? '対応を確認して解析を開始' : 'このデータを表示', exact: true })
     .click();
   const ready = () =>
     expect(page.locator('main.main-panel')).toHaveAttribute(
@@ -201,7 +205,7 @@ export async function referenceDiskWorkflow(
       { timeout: 180_000 },
     );
   };
-  await attach();
+  if (!audioFirst) await attach();
   const firstAttachedMs = Date.now() - started;
   console.log(
     JSON.stringify({
@@ -210,6 +214,16 @@ export async function referenceDiskWorkflow(
       elapsedMs: firstAttachedMs,
     }),
   );
+  let fullReselectionMs: number | undefined;
+  if (verifyFullReselection) {
+    const reselectionStarted = Date.now();
+    await page.locator('input[webkitdirectory]').setInputFiles(fixture.wavPath, { timeout: 180000 });
+    const check = page.getByRole('region', { name: '音声の取り込み前確認' });
+    await expect(check).toContainText(`新規0件・内容一致で保持${count}件・競合0件`, { timeout: 300000 });
+    await check.getByRole('button', { name: '確認して追加', exact: true }).click();
+    fullReselectionMs = Date.now() - reselectionStarted;
+    console.log(JSON.stringify({ phase: 'full-folder-byte-verified', count, elapsedMs: fullReselectionMs }));
+  }
   if (folderGrouping) {
     await page.locator('#group-column').selectOption('WAVフォルダ階層1');
     await page.locator('#group-a').selectOption('group_a');
@@ -405,6 +419,8 @@ export async function referenceDiskWorkflow(
     tailHash: playedHash,
     tailPlaybackSeconds: await audio.evaluate((el) => el.currentTime),
     fixtureValidatedMs,
+    audioFirst,
+    fullReselectionMs,
     firstAttachedMs,
     initiallySavedMs,
     csvResumedMs,

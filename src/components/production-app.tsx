@@ -113,7 +113,7 @@ function ReadyApplication({ controller, policy, children }: { controller: Worksp
   }, [controller]);
   return <WorkspaceContext.Provider value={{ controller, policy, openManager }}>
     <ViewPreferencesProvider key={snapshot.active?.record.id ?? 'welcome'}>
-      {snapshot.active ? children : <div className="lab-shell dark"><header className="app-header"><strong>ASD Insight</strong><div className="startup-header-actions"><ManualLink /><span><ShieldCheck size={14}/> 端末内で処理</span></div></header><main className="startup-state"><Database size={30}/><h1>分析するデータを選ぶ</h1><p>CSV・TSVを開くか、このブラウザーに保存した分析を再開できます。</p><Button onClick={openManager}>データを選ぶ</Button><p className="storage-note">データと音声を外部へ送信しません。同じブラウザープロファイルの利用者は保存した分析を開けます。</p></main></div>}
+      {snapshot.active ? children : <div className="lab-shell dark"><header className="app-header"><strong>ASD Insight</strong><div className="startup-header-actions"><ManualLink /><span><ShieldCheck size={14}/> 端末内で処理</span></div></header><main className="startup-state"><Database size={30}/><h1>分析するデータを選ぶ</h1><p>WAV音源を選び、CSVから属性を付けて解析します。保存した分析の再開もできます。</p><Button onClick={openManager}>データを選ぶ</Button><p className="storage-note">データと音声を外部へ送信しません。同じブラウザープロファイルの利用者は保存した分析を開けます。</p></main></div>}
       <SessionManager open={managerOpen} onClose={() => setManagerOpen(false)}/>
     </ViewPreferencesProvider>
   </WorkspaceContext.Provider>;

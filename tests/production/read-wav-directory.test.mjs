@@ -50,3 +50,11 @@ test('directory picker accepts more than the former 2,000 WAV limit', async () =
   assert.equal(files.length, 2001);
   assert.equal(audioFileKey(files.at(-1)), '2000.wav');
 });
+
+test('cancelled traversal stops before another getFile and never returns a partial folder', async () => {
+  const abort = new AbortController();
+  let reads = 0;
+  const handle = name => ({ kind: 'file', name, async getFile() { reads++; abort.abort(); return new File(['RIFF'], name); } });
+  await assert.rejects(readWavDirectory(directory('root', { 'a.wav': handle('a.wav'), 'b.wav': handle('b.wav') }), abort.signal), { name: 'AbortError' });
+  assert.equal(reads, 1);
+});

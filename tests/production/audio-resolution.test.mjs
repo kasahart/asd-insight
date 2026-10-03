@@ -605,3 +605,69 @@ test('stored evaluation scopes ignore object key ordering but still reject chang
     assert.equal(evaluationPopulationScopesMatch('not-json', original), false);
   }
 });
+
+test('full folder reselection verifies bytes, retains original objects and adds only missing WAVs', async () => {
+  const { prepareAudioAttachments } = await import('../../src/lib/audio-attachments.ts');
+  const make = (key, bytes, lastModified = 1) => {
+    const f = new File([bytes], key.split('/').at(-1), { lastModified });
+    Object.defineProperty(f, 'webkitRelativePath', { value: `root/${key}` });
+    return f;
+  };
+  const a = make('A/a.wav', 'same');
+  const existing = new Map([['A/a.wav', a]]);
+  const rows = [{ audio_file: 'A/a.wav' }, { audio_file: 'B/b.wav' }];
+  const assignments = { rows, resolve: (row, index, files) => findAudio(row, index, '', 'audio_file', files) };
+  const b = make('B/b.wav', 'new');
+  const result = await prepareAudioAttachments(existing, [make('A/a.wav', 'same', 999), b], new AbortController().signal, assignments);
+  assert.deepEqual(result.retained, ['A/a.wav']);
+  assert.deepEqual(result.incoming, [b]);
+  assert.deepEqual(result.conflicts, []); assert.deepEqual(result.changed, []);
+  assert.equal(result.files.get('A/a.wav'), a); assert.equal(existing.size, 1);
+  const map = addAudioAttachments(existing, result.incoming, assignments);
+  assert.equal(map.size, 2); assert.equal(map.get('A/a.wav'), a);
+  // Equal size + mtime is insufficient: same-path, different content is rejected.
+  const conflict = await prepareAudioAttachments(existing, [make('A/a.wav', 'diff'), b], new AbortController().signal, assignments);
+  assert.match(conflict.conflicts[0], /内容が異なります/); assert.equal(existing.size, 1);
+  const repeated = await prepareAudioAttachments(existing, [a, a], new AbortController().signal, assignments);
+  assert.match(repeated.conflicts[0], /選択内で相対パスが重複/);
+});
+
+test('reselection checks all chunks, rejects a changed last byte and supports mid-read abort without mutation', async () => {
+  const { prepareAudioAttachments } = await import('../../src/lib/audio-attachments.ts');
+  const bytes = new Uint8Array(2 * 1024 * 1024 + 3);
+  const a = new File([bytes], 'a.wav');
+  const equal = new File([bytes], 'a.wav');
+  const assignments = { rows: [], resolve: () => undefined };
+  const existing = new Map([['a.wav', a]]);
+  let result = await prepareAudioAttachments(existing, [equal], new AbortController().signal, assignments);
+  assert.deepEqual(result.retained, ['a.wav']);
+  bytes[bytes.length - 1] = 1;
+  result = await prepareAudioAttachments(existing, [new File([bytes], 'a.wav')], new AbortController().signal, assignments);
+  assert.match(result.conflicts[0], /内容が異なります/);
+  const abort = new AbortController();
+  const originalSlice = equal.slice.bind(equal);
+  equal.slice = (...args) => { const part = originalSlice(...args); const original = part.arrayBuffer.bind(part); part.arrayBuffer = async () => { const buffer = await original(); abort.abort(); return buffer; }; return part; };
+  await assert.rejects(prepareAudioAttachments(existing, [equal], abort.signal, assignments), { name: 'AbortError' });
+  assert.equal(existing.get('a.wav'), a); assert.equal(existing.size, 1);
+});
+
+test('supplement never ambiguates an existing basename match and never reads new recordings', async () => {
+  const { prepareAudioAttachments } = await import('../../src/lib/audio-attachments.ts');
+  const a = new File(['a'], 'a.wav'); Object.defineProperty(a, 'webkitRelativePath', { value: 'root/A/a.wav' });
+  const b = new File(['b'], 'a.wav'); Object.defineProperty(b, 'webkitRelativePath', { value: 'root/B/a.wav' });
+  b.slice = () => { throw new Error('new file bytes must remain lazy'); };
+  const existing = new Map([['A/a.wav', a]]);
+  const rows = [{ audio_file: 'a.wav' }];
+  const result = await prepareAudioAttachments(existing, [b], new AbortController().signal, { rows, resolve: (row, index, files) => findAudio(row, index, '', 'audio_file', files) });
+  assert.deepEqual(result.changed, [1]); assert.equal(existing.size, 1);
+});
+
+test('clearing the live picker list during an awaited comparison cannot drop later files', async () => {
+  const { prepareAudioAttachments } = await import('../../src/lib/audio-attachments.ts');
+  const a = new File(['same'], 'a.wav'), again = new File(['same'], 'a.wav'), b = new File(['new'], 'b.wav');
+  const live = [again, b];
+  const pending = prepareAudioAttachments(new Map([['a.wav', a]]), live, new AbortController().signal, { rows: [], resolve: () => undefined });
+  live.length = 0;
+  const result = await pending;
+  assert.deepEqual(result.retained, ['a.wav']); assert.deepEqual(result.incoming, [b]); assert.equal(result.files.size, 2);
+});
