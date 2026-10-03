@@ -180,10 +180,10 @@ test('軽量保存は元CSVを照合し、欠けた音声があっても階層�
     'aria-busy',
     'false',
   );
-  await expect(page.getByLabel('調査メモ', { exact: true })).toHaveValue(
-    '音声を複製せず調査を保存',
-  );
-  await expect(inspector).toContainText('集計から除外中');
+  await expect(page.getByLabel('調査メモ', { exact: true })).toHaveCount(0);
+  const notice = page.getByRole('region', { name: '音源とCSV属性の対応' });
+  await notice.getByText('対象外の元CSV行（4行）', { exact: true }).click();
+  await expect(notice).toContainText('音声を複製せず調査を保存');
   await expect(page.locator('.save-notification')).toContainText(
     '音声4件は未選択',
   );
@@ -217,6 +217,13 @@ test('軽量保存は元CSVを照合し、欠けた音声があっても階層�
   ).toBeVisible();
   await csvInput.setInputFiles(csvFile);
   await expect(dialog).not.toBeVisible();
+  await expect(page.getByLabel('調査メモ', { exact: true })).toHaveCount(0);
+  const restoredNotice = page.getByRole('region', { name: '音源とCSV属性の対応' });
+  await restoredNotice.getByText('対象外の元CSV行（4行）', { exact: true }).click();
+  await expect(restoredNotice).toContainText('音声を複製せず調査を保存');
+  await page.locator('input[webkitdirectory]').setInputFiles(folder);
+  await page.getByRole('button', { name: '確認して追加' }).click();
+  await page.getByRole('button', { name: 'a1.wav を選択', exact: true }).first().click();
   await expect(page.getByLabel('調査メモ', { exact: true })).toHaveValue(
     '音声を複製せず調査を保存',
   );
@@ -225,7 +232,7 @@ test('軽量保存は元CSVを照合し、欠けた音声があっても階層�
 
 test('全量から軽量保存へのコピー・再開後もしきい値と判断絞り込みを保持する', async ({
   page,
-}) => {
+}, testInfo) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'データを選ぶ', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'データと保存した分析' });
@@ -237,6 +244,15 @@ test('全量から軽量保存へのコピー・再開後もしきい値と判�
     'aria-busy',
     'false',
   );
+  const folder = testInfo.outputPath('copy-audio');
+  for (const group of ['A', 'B']) {
+    await mkdir(join(folder, group), { recursive: true });
+    for (const i of [1, 2])
+      await writeFile(join(folder, group, `${group.toLowerCase()}${i}.wav`), wav());
+  }
+  await page.locator('input[webkitdirectory]').setInputFiles(folder);
+  await page.getByRole('button', { name: '確認して追加' }).click();
+  await expect(page.locator('.audio-import-control')).toContainText('4 / 4件');
   await page.getByRole('button', { name: /^分布のしきい値設定を開く/ }).click();
   const threshold = page.getByRole('complementary', {
     name: '分布のしきい値設定',
@@ -306,6 +322,9 @@ test('全量から軽量保存へのコピー・再開後もしきい値と判�
     'aria-busy',
     'false',
   );
+  await page.locator('input[webkitdirectory]').setInputFiles(folder);
+  await page.getByRole('button', { name: '確認して追加' }).click();
+  await expect(page.locator('.audio-import-control')).toContainText('4 / 4件');
   const resumed = await report();
   expect(resumed.source.logicalDatasetHash).toBe(
     before.source.logicalDatasetHash,
