@@ -19,7 +19,7 @@ const fixture = () => ({
     minDb: -100,
     maxDb: 0,
   },
-  recipe: { engine: 'wandas', engineVersion: '0.8.0+insightapi.1', unit: 'dBFS' },
+  recipe: { engine: 'wandas', engineVersion: '0.8.1', unit: 'dBFS' },
   runtimeLockHash: 'a'.repeat(64),
   sourceHash: 'b'.repeat(64),
 });
