@@ -59,7 +59,7 @@ export function SessionManager({ open, onClose }: { open: boolean; onClose: () =
         {pendingResume && <section aria-label="軽量保存の再開" className="data-source-preview">
           <h3>{pendingResume.record.title}を再開</h3>
           <p>元CSV「{pendingResume.dataset.name}」を選び直してください。保存時の内容と一致することを確認して、解析設定・メモ・除外履歴を復元します。</p>
-          <p>音声{pendingResume.record.audioReferences?.length.toLocaleString()}件は保存に含まれません。CSVの集計を再開後、必要な音声フォルダを選び直せます。欠けた音声があっても調査状態は保持されます。</p>
+          <p>音声{pendingResume.record.audioReferences?.length.toLocaleString()}件は保存に含まれません。CSVを確認した後、音声フォルダを選び直してください。対応した音源だけが解析対象です。欠けた音声や非採用のCSV行も、元データ・メモ・除外履歴は保持されます。</p>
           <Button disabled={disabled} onClick={() => csvInput.current?.click()}>元CSVを選んで再開</Button>
           <Button variant="outline" disabled={disabled} onClick={() => controller.cancelResume()}>再開を取り消す</Button>
         </section>}
@@ -102,7 +102,7 @@ export function SessionManager({ open, onClose }: { open: boolean; onClose: () =
         </section>
         <section hidden={tab !== 'demo'} aria-label="合成デモ"><div className="data-source-demo-card"><FlaskConical/><div><h3>操作確認用の合成データ</h3><p>分布・しきい値・音声表示の操作を試せます。実データの性能評価には使えません。</p></div></div></section>
       </div>
-      <footer className="data-source-footer"><span>{tab === 'saved' ? 'バックアップの復元は別の分析として追加します。' : '取り込み後に評価条件を設定できます。'}</span>{tab === 'csv' && <Button disabled={disabled || !candidate || !!importer.error} onClick={() => candidate && void run('分析を作成しています…', () => create(candidate), true)}>このデータを表示</Button>}{tab === 'demo' && <Button disabled={disabled} onClick={() => void run('合成データを作成しています…', async () => { const client = new EvaluationWorkerClient(); try { const data = demoDataset(); await create(createDatasetCandidate(data, await client.profile(data))); } finally { client.dispose(); } }, true)}>合成デモを表示</Button>}</footer>
+      <footer className="data-source-footer"><span>{tab === 'saved' ? 'バックアップの復元は別の分析として追加します。' : 'CSVは入力準備です。音源を選び、対応した音源にCSV属性を付けて解析します。'}</span>{tab === 'csv' && <Button disabled={disabled || !candidate || !!importer.error} onClick={() => candidate && void run('分析を作成しています…', () => create(candidate), true)}>このデータを表示</Button>}{tab === 'demo' && <Button disabled={disabled} onClick={() => void run('合成データを作成しています…', async () => { const client = new EvaluationWorkerClient(); try { const data = demoDataset(); await create(createDatasetCandidate(data, await client.profile(data))); } finally { client.dispose(); } }, true)}>合成デモを表示</Button>}</footer>
       <input ref={csvInput} type="file" accept=".csv,.tsv" hidden onChange={event => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value=''; if (!files.length) return; if (pendingResume) void run('元CSVの一致を確認中…', async () => { const selected = await readCSVCandidate(files, new AbortController().signal); await controller.resumeReference(selected.dataset, selected.source!); }, true); else void importer.readCSV(files); }}/>
       <input ref={bundleInput} type="file" accept=".ovlab" hidden onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value=''; if (file) void run('バックアップを検証・復元しています…', () => controller.importBundle(file), true); }}/>
     </div>

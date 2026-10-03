@@ -1,5 +1,7 @@
 'use client';
 
+import { audioPopulation } from '@domain/audio-population';
+import { AudioPopulationNotice } from '@/components/audio-population-notice';
 import { datasetRows } from '@domain/dataset-rows';
 import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import {
@@ -1050,22 +1052,10 @@ function DiagnosticsWorkspace() {
         .map(({ level }) => level),
     );
     setPendingAudio(null);
-    const matched = auditAudioMatches(
-      sourceData,
-      idColumn,
-      audioColumn,
-      map,
-    ).matched;
+    const joined = audioPopulation(sourceData, idColumn, audioColumn, map);
     setMessage({
-      error: false,
-      text:
-        map.size +
-        'ファイルを追加、' +
-        matched +
-        '行に対応しました。' +
-        (data.demo
-          ? '実音声を使うときは、先にCSVを読み込んでください。'
-          : 'サーバーへの送信はしていません。'),
+      error: !!(joined.missing.length || joined.ambiguous.length),
+      text: `${map.size}音源を追加。CSV属性を採用した解析対象候補は${joined.adopted.size}音源です。未対応${joined.missing.length}行・曖昧${joined.ambiguous.length}行・重複非採用${joined.duplicates.length}行は解析に含めません。サーバーへの送信はしていません。`,
     });
   }
   function chooseRange(r: ScoreRange) {
@@ -1188,6 +1178,7 @@ function DiagnosticsWorkspace() {
           </Button>
         </div>
       )}
+      <AudioPopulationNotice dataset={sourceData} idColumn={idColumn} audioColumn={audioColumn} files={audioFiles} notes={notes} downloads={policy.downloads} />
       <div className="workspace" inert={!!operation}>
         <SampleReviewWorkspace
           dataset={data}
@@ -1236,6 +1227,7 @@ function DiagnosticsWorkspace() {
             const selectedAudioFile = selectedAudioResolution?.file;
             return (
               <>
+
                 <aside
                   className="control-panel"
                   id="comparison-settings"
@@ -1244,6 +1236,7 @@ function DiagnosticsWorkspace() {
                   <div className="panel-heading">
                     <h2>評価条件</h2>
                   </div>
+                {!data.demo && <p aria-label="音源の指標対象件数">指標対象 {review.calculationTotal === null ? "計算待ち" : `${review.calculationTotal.toLocaleString()}音源`}。音源ごとに採用したCSV属性だけを使います。{review.workerResult && `スコア欠測 ${review.workerResult.comparison.missingA + review.workerResult.comparison.missingB}件、比較群欠測 ${review.workerResult.comparison.missingGroup}件、指定群の対象外 ${review.workerResult.comparison.otherGroup}件、条件外 ${review.workerResult.comparison.outsideFilter}件、手動除外 ${review.workerResult.comparison.ignoredRows}件。`}</p>}
                   <div className="field">
                     <label htmlFor="score">評価する異常度の列</label>
                     <NativeSelect
@@ -1437,7 +1430,7 @@ function DiagnosticsWorkspace() {
                       <NativeSelect
                         id="audio-column"
                         value={audioColumn}
-                        onChange={(e) => setAudioColumn(e.target.value)}
+                        onChange={(e) => { try { setAudioColumn(e.target.value); } catch (error) { setMessage({error: true, text: error instanceof Error ? error.message : "対応列を変更できません。"}); } }}
                       >
                         <option value="">音声列を選択してください</option>
                         {sourceData.columns.map((c) => (

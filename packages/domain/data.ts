@@ -234,6 +234,7 @@ export function partitionRows(
   spec: GroupSpec,
   filter?: FilterSpec | null,
   ignored?: ReadonlySet<number>,
+  audioExcluded?: ReadonlySet<number>,
 ) {
   if (!score || !spec.column)
     throw new Error('異常度の列と、比較群を定義する列を選んでください。');
@@ -261,6 +262,7 @@ export function partitionRows(
     membersB = 0,
     ignoredRows = 0;
   rows.forEach((row, index) => {
+    if (audioExcluded?.has(index)) return;
     if (ignored?.has(index)) {
       ignoredRows++;
       return;

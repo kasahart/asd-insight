@@ -1,5 +1,7 @@
 'use client';
 
+import { audioPopulation, audioIgnoredIndices, AUDIO_JOIN_POLICY } from '@domain/audio-population';
+
 import { datasetRows } from '@domain/dataset-rows';
 import { logicalDatasetHash } from '@/state/input-references';
 import {
@@ -234,6 +236,8 @@ export function SampleReviewWorkspace({
   children: (state: SampleReviewState) => ReactNode;
 }) {
   const { active } = useWorkspace();
+  const [joinPolicy, setJoinPolicy] = useSessionState("audioJoinPolicy", AUDIO_JOIN_POLICY);
+  useEffect(() => { if (active!.record.state.audioJoinPolicy === undefined || joinPolicy !== AUDIO_JOIN_POLICY) setJoinPolicy(AUDIO_JOIN_POLICY); }, [active!.record.state.audioJoinPolicy, joinPolicy, setJoinPolicy]);
   const [records, setRecords] = useSessionState<Record<number, IgnoredSample>>(
     'reviewRecords',
     {},
@@ -270,10 +274,20 @@ export function SampleReviewWorkspace({
   } | null>('viewport', null);
   const [filterError, setFilterError] = useState('');
   const ignored = useMemo(() => Object.values(records), [records]);
-  const ignoredIndices = useMemo(
-    () => new Set(ignored.map((s) => s.rowIndex)),
-    [ignored],
-  );
+  const population = useMemo(() => audioPopulation(dataset, idColumn, audioColumn, active!.audioFiles), [dataset, idColumn, audioColumn, active!.audioFiles]);
+  const audioReady = dataset.demo || active!.audioFiles.size > 0;
+  const ignoredIndices = useMemo(() => audioIgnoredIndices(population, new Set(ignored.map(s => s.rowIndex))), [population, ignored]);
+  const reviewIgnored = useMemo(() => {
+    const byAudio = new Map<number, IgnoredSample>();
+    for (const entry of ignored) {
+      const key = population.rowKeys.get(entry.rowIndex);
+      const rowIndex = key === undefined ? entry.rowIndex : (population.adopted.get(key) ?? entry.rowIndex);
+      const reason = rowIndex === entry.rowIndex ? entry.reason : `元CSV ${entry.rowIndex + 1}行目の除外：${entry.reason}`;
+      const previous = byAudio.get(rowIndex);
+      byAudio.set(rowIndex, { ...entry, rowIndex, reason: previous ? `${previous.reason} / ${reason}` : reason });
+    }
+    return [...byAudio.values()];
+  }, [ignored, population]);
   const derivedPopulation = useMemo(
     () =>
       derivedPopulationSignature(
@@ -298,6 +312,7 @@ export function SampleReviewWorkspace({
     [
       logicalDatasetHash(active!.record),
       'evaluation-v1',
+      ...(dataset.demo ? [] : [AUDIO_JOIN_POLICY, population.signature]),
       score,
       group,
       filterColumn,
@@ -319,12 +334,13 @@ export function SampleReviewWorkspace({
   );
   const selection = setting && settingMatches ? setting.selection : null;
   useEffect(() => {
-    if (setting && !settingMatches) {
+    if (audioReady && setting && !settingMatches) {
       setSetting(null);
       if (decision.filter !== 'ignored')
         setDecision({ filter: 'all', scope: '' });
     }
   }, [
+    audioReady,
     populationKey,
     setting,
     settingMatches,
@@ -387,6 +403,7 @@ export function SampleReviewWorkspace({
           ? { column: filterColumn, value: filterValue }
           : null,
       ignoredIndices: [...ignoredIndices],
+      ...(dataset.demo ? {} : { audioExcludedIndices: population.excludedIndices }),
       okGroup,
       direction,
       bins,
@@ -411,6 +428,7 @@ export function SampleReviewWorkspace({
     filterColumn,
     filterValue,
     ignoredIndices,
+    population,
     okGroup,
     direction,
     bins,
@@ -444,7 +462,7 @@ export function SampleReviewWorkspace({
         ? (execution.presentation?.thresholdReport?.calibration.rule ?? null)
         : null;
   const result =
-    execution.result ?? (execution.pending ? execution.presentation : null);
+    execution.result ?? (execution.pending && execution.presentationPopulationKey === populationKey ? execution.presentation : null);
   const pending = execution.pending;
   const partition = useMemo(
     () => (value: EvaluationPartition | undefined) =>
@@ -601,7 +619,7 @@ export function SampleReviewWorkspace({
       pending ||
       execution.error ||
       datasetRows(dataset)[sample.index] !== sample.row ||
-      records[sample.index]
+      ignoredIndices.has(sample.index)
     )
       return;
     const entry: IgnoredSample = {
@@ -618,19 +636,21 @@ export function SampleReviewWorkspace({
     setHistory((prev) => [...prev, { ...entry, action: 'ignore' }]);
   }
   function restore(rowIndex: number) {
-    if (pending || execution.error || !records[rowIndex]) return;
+    const key = population.rowKeys.get(rowIndex);
+    const indices = key === undefined ? [rowIndex] : Object.keys(records).map(Number).filter(i => population.rowKeys.get(i) === key);
+    if (pending || execution.error || !indices.length) return;
     const entry = {
-      ...records[rowIndex],
+      ...records[indices[0]],
       at: new Date().toISOString(),
       decision: capture(),
     };
     clear();
     setRecords((prev) => {
       const next = { ...prev };
-      delete next[rowIndex];
+      for (const index of indices) delete next[index];
       return next;
     });
-    setHistory((prev) => [...prev, { ...entry, action: 'restore' }]);
+    setHistory((prev) => [...prev, ...indices.map(index => ({ ...records[index], at: entry.at, decision: entry.decision, action: 'restore' as const }))]);
   }
   const distribution = result?.distribution ?? emptyDistribution;
   const calculationTotal =
@@ -680,7 +700,7 @@ export function SampleReviewWorkspace({
             matrix: null,
           },
     candidateScope: !pending ? (result?.listing.candidateScope ?? null) : null,
-    ignored,
+    ignored: reviewIgnored,
     history,
     ignore,
     restore,

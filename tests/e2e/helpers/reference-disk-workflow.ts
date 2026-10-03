@@ -322,32 +322,12 @@ export async function referenceDiskWorkflow(
     .setInputFiles(fixture.csvPath);
   await expect(dialog).not.toBeVisible();
   await ready();
-  const resumed = await report(page);
-  await writeFile(
-    testInfo.outputPath('resume-diagnostic.json'),
-    JSON.stringify(
-      {
-        before,
-        stored,
-        resumed,
-        resumedStored: await persisted(page, before.analysis.id),
-      },
-      null,
-      2,
-    ),
-  );
-  for (const key of [
-    'settings',
-    'threshold',
-    'manualReview',
-    'notes',
-    'inspection',
-  ])
-    expect(resumed[key]).toEqual(before[key]);
-  expect(resumed.source.logicalDatasetHash).toBe(
-    before.source.logicalDatasetHash,
-  );
-  expect(await page.locator('audio').count()).toBe(0);
+  // Audio availability is recomputed after reselection; CSV alone must not expose old metrics.
+  await expect(page.getByRole('region', { name: '音源とCSV属性の対応' })).toContainText('解析対象は0件');
+  const resumedStored = await persisted(page, before.analysis.id);
+  for (const key of ['notes', 'reviewRecords', 'thresholdSetting'])
+    expect(resumedStored.state[key]).toEqual(stored.state[key]);
+  expect(await page.locator('audio[src]').count()).toBe(0);
   const csvResumedMs = Date.now() - started;
   console.log(
     JSON.stringify({ phase: 'csv-resumed', count, elapsedMs: csvResumedMs }),

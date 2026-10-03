@@ -86,6 +86,8 @@ export type EvaluationSpec = {
   group: GroupSpec;
   conditionFilter?: FilterSpec | null;
   ignoredIndices?: readonly number[];
+  /** Recomputed audio availability/join mask; never manual review records. */
+  audioExcludedIndices?: readonly number[];
   okGroup: 'A' | 'B';
   direction: ScoreDirection;
   bins?: number;

@@ -137,7 +137,7 @@ function validateSpec(dataset: Dataset, spec: EvaluationSpec): void {
   if (spec.direction !== 'high' && spec.direction !== 'low')
     throw new Error('スコアの方向を指定してください。');
   if (
-    spec.ignoredIndices?.some(
+    [...(spec.ignoredIndices ?? []), ...(spec.audioExcludedIndices ?? [])].some(
       (index) =>
         !Number.isInteger(index) || index < 0 || index >= dataset.rows.length,
     )
@@ -200,11 +200,16 @@ export function evaluateDataset(
 ): EvaluationResult {
   validateSpec(dataset, spec);
   const ignored = new Set(spec.ignoredIndices ?? []);
+  const audioExcluded = new Set(spec.audioExcludedIndices ?? []);
+  if (spec.audioExcludedIndices !== undefined && audioExcluded.size === dataset.rows.length)
+    throw new Error("音源にCSV属性が対応した解析対象は0件です。CSVとWAVフォルダの対応を確認してください。");
   const base = partitionRows(
     datasetRows(dataset),
     spec.scoreColumn,
     spec.group,
     spec.conditionFilter,
+    undefined,
+    audioExcluded,
   );
   const retained = ignored.size
     ? partitionRows(
@@ -213,6 +218,7 @@ export function evaluateDataset(
         spec.group,
         spec.conditionFilter,
         ignored,
+        audioExcluded,
       )
     : base;
   const a: number[] = [],
@@ -329,8 +335,8 @@ export function evaluateDataset(
   );
   const sorted = sortReviewSamples(listing.listed, list.sort, list.audioColumn);
   return {
-    baseline: compactPartition(dataset, base, new Set()),
-    comparison: compactPartition(dataset, retained, ignored),
+    baseline: compactPartition(dataset, base, audioExcluded),
+    comparison: compactPartition(dataset, retained, new Set([...ignored, ...audioExcluded])),
     distribution,
     displayDistribution,
     viewport: {
