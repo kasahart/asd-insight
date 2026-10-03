@@ -292,6 +292,7 @@ test('全量から軽量保存へのコピー・再開後もしきい値と判�
   await dialog
     .getByRole('button', { name: '現在の調査を軽量保存にコピー', exact: true })
     .click();
+  await expect(dialog.getByRole('button', { name: 'データ選択を閉じる', exact: true })).toBeEnabled();
   await page.keyboard.press('Escape');
   await expect(dialog).not.toBeVisible();
   const copied = await report();
