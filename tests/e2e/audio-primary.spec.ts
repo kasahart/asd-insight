@@ -87,7 +87,8 @@ test('音源を起点に最初のCSV行だけを採用し、未対応・曖昧�
     expect(report.source.audioPopulation.excludedRows.missing).toEqual([3]);
     expect(report.source.audioPopulation.excludedRows.ambiguous).toEqual([{ rowIndex: 4, candidates: expect.arrayContaining(['x/same.wav', 'y/same.wav']) }]);
     expect(report.source.audioPopulation.excludedRows.duplicate).toEqual([{ rowIndex: 1, adoptedRowIndex: 0, audioKey: 'A/a.wav' }]);
-    expect(report.source.audioPopulation.inventory.find((item: { audioKey: string }) => item.audioKey === 'A/a.wav')).toMatchObject({ rowIndex: 0, bytes: wav().length });
+    expect(report.source.audioPopulation.inventoryColumns).toEqual(['audioKey', 'rowIndex']);
+    expect(report.source.audioPopulation.inventory.find((item: [string, number | null]) => item[0] === 'A/a.wav')).toEqual(['A/a.wav', 0]);
     expect(report.source.audioPopulation.signature).toMatch(/^3:/);
     expect(report.summary.excluded.audio).toBe(3);
     await notice.getByText('対象外の元CSV行（3行）', { exact: true }).click();
