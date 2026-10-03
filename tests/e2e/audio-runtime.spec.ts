@@ -197,7 +197,7 @@ test('合成デモの音声を実Wandas/Pyodideで解析し、音声表示とゲ
   await responseFor(/\/runtime\/audio\/pyodide\.mjs$/, 'Pyodide mjs');
   await responseFor(/\/runtime\/audio\/pyodide\.asm\.wasm$/, 'Pyodide WASM');
   await responseFor(
-    /\/runtime\/audio\/wandas-0\.7\.2-[^/]+\.whl$/,
+    /\/runtime\/audio\/wandas-0\.8\.1-[^/]+\.whl$/,
     'Wandas wheel',
   );
   const workerResponse = await responseFor(

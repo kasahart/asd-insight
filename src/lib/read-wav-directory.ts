@@ -5,17 +5,21 @@ type EnumerableDirectory = FileSystemDirectoryHandle & {
 /** Read only WAV files, keeping the same selected-root path as webkitdirectory. */
 export async function readWavDirectory(
   root: FileSystemDirectoryHandle,
+  signal?: AbortSignal,
 ): Promise<File[]> {
   const files: File[] = [];
 
   async function visit(directory: FileSystemDirectoryHandle, parts: string[]) {
+    signal?.throwIfAborted();
     for await (const [name, handle] of (
       directory as EnumerableDirectory
     ).entries()) {
+      signal?.throwIfAborted();
       if (handle.kind === 'directory') {
         await visit(handle as FileSystemDirectoryHandle, [...parts, name]);
       } else if (/\.wav$/i.test(name)) {
         const file = await (handle as FileSystemFileHandle).getFile();
+        signal?.throwIfAborted();
         // File.webkitRelativePath is normally filled by <input webkitdirectory>.
         // The directory picker returns File objects without that path.
         Object.defineProperty(file, 'webkitRelativePath', {

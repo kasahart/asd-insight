@@ -40,6 +40,7 @@ async function createReference(page: Page) {
   await page.goto('/');
   await page.getByRole('button', { name: 'データを選ぶ', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'データと保存した分析' });
+  await dialog.getByRole('button', { name: 'CSV・TSV', exact: true }).click();
   await dialog.getByRole('radio', { name: /軽量保存：/ }).check();
   await dialog.locator('input[accept=".csv,.tsv"]').setInputFiles(csvFile);
   await dialog
@@ -111,9 +112,11 @@ test('部分フォルダを再開後に追加しても同名WAVの別パスを�
     '音声1件は未選択',
   );
   await saved(page);
-  await expect(page.getByLabel('調査メモ', { exact: true })).toHaveValue(
-    'Aの音声は別パスのBで置き換えない',
-  );
+  const notice = page.getByRole('region', { name: '音源とCSV属性の対応' });
+  await notice.getByText('対象外の元CSV行（1行）', { exact: true }).click();
+  await expect(notice).toContainText('元CSV 1行目：音源未対応');
+  await expect(notice).toContainText('Aの音声は別パスのBで置き換えない');
+  await expect(page.getByLabel('調査メモ', { exact: true })).toHaveCount(0);
   // Explicit A remains unavailable, rather than playing B's same-named file.
   await expect(page.locator('#sample-inspector-content audio')).toHaveCount(0);
   await page
@@ -130,6 +133,9 @@ test('部分フォルダを再開後に追加しても同名WAVの別パスを�
   await expect(page.locator('#sample-inspector-content audio')).toHaveCount(1);
   await attach(page, first);
   await expect(page.locator('.audio-import-control')).toContainText('2 / 2件');
+  await selectA(page);
+  await expect(page.getByLabel('調査メモ', { exact: true })).toHaveValue('Aの音声は別パスのBで置き換えない');
+  await expect(page.locator('#sample-inspector-content')).toContainText('対応WAV: A/sample.wav');
   await saved(page);
 });
 
@@ -173,13 +179,18 @@ test('別タブの保存と競合したWAVを編集破棄後の再生に残さ�
     .getByRole('button', { name: 'データ選択を閉じる', exact: true })
     .click();
   await saved(other);
-  await expect(other.getByLabel('調査メモ', { exact: true })).toHaveValue(
-    '先のタブで保存したメモ',
-  );
+  const notice = other.getByRole('region', { name: '音源とCSV属性の対応' });
+  await notice.getByText('対象外の元CSV行（2行）', { exact: true }).click();
+  await expect(notice).toContainText('先のタブで保存したメモ');
+  await expect(other.getByLabel('調査メモ', { exact: true })).toHaveCount(0);
   await expect(other.locator('.audio-import-control')).toContainText('0 / 2件');
   await expect(other.locator('#sample-inspector-content audio')).toHaveCount(0);
   await expect(other.locator('output.save-notification')).toContainText(
     '音声1件は未選択',
   );
+  await attach(other, firstFolder);
+  await selectA(other);
+  await expect(other.getByLabel('調査メモ', { exact: true })).toHaveValue('先のタブで保存したメモ');
+  await expect(other.locator('#sample-inspector-content')).toContainText('対応WAV: A/sample.wav');
   await other.close();
 });

@@ -114,6 +114,7 @@ function store(data, state = {}) {
   let snapshot = {
     active: {
       dataset: data,
+      audioFiles: new Map(data.rows.map(row => [row.name, new File(['audio'], row.name)])),
       record: {
         id: 'session-1',
         datasetVersionId: 'version-1',
@@ -145,10 +146,12 @@ function store(data, state = {}) {
       };
       for (const listener of listeners) listener();
     },
+    audio(files) { snapshot = { ...snapshot, active: { ...snapshot.active, audioFiles: files } }; for (const listener of listeners) listener(); },
     replace(data) {
       snapshot = {
         active: {
           dataset: data,
+          audioFiles: new Map(data.rows.map(row => [row.name, new File(['audio'], row.name)])),
           record: {
             id: 'session-2',
             datasetVersionId: 'version-2',
@@ -165,8 +168,8 @@ function Probe({ review, receive }) {
   receive({ review, threshold: useThreshold() });
   return null;
 }
-async function mount({ strict = false, initialState } = {}) {
-  let data = dataset();
+async function mount({ strict = false, initialState, initialDataset } = {}) {
+  let data = initialDataset ?? dataset();
   let view;
   let props = {};
   const controller = store(data, initialState);
@@ -482,4 +485,27 @@ test('unapplied viewport text edits do not start evaluation; applying a new exte
     app.view.review.workerResult.evaluation,
     baseline.evaluation,
   );
+});
+
+
+test('audio removal immediately hides the old population and retains records until inputs are reverified', async () => {
+ const app=await mount();await app.finish();const sources=app.controller.getSnapshot().active.audioFiles;
+ await act(async()=>app.controller.audio(new Map()));
+ assert.equal(app.view.review.workerResult,null);assert.deepEqual(app.view.review.visible,[]);assert.deepEqual(app.view.review.a,[]);assert.equal(app.view.review.thresholdReport,null);
+ await app.finish();assert.match(app.view.review.error,/解析対象は0件/);
+ await act(async()=>app.controller.audio(new Map([...sources].slice(0,2))));
+ assert.equal(app.view.review.workerResult,null);await app.finish();assert.deepEqual(app.view.review.visible.map(s=>s.index),[0,1]);assert.equal(app.view.review.calculationTotal,2);
+ await act(async()=>app.controller.audio(sources));await app.finish();assert.equal(app.view.review.calculationTotal,102);
+});
+
+test('legacy exclusion on a rejected duplicate excludes its audio until the user explicitly restores it', async () => {
+ const data=dataset('duplicates.csv',4);data.rows[1].name=data.rows[0].name;
+ const entry={rowIndex:1,reason:'old reason',at:'2026-10-01T00:00:00Z',groupColumn:'label',groupValue:'OK',decision:{}};
+ const app=await mount({initialDataset:data,initialState:{reviewRecords:{1:entry},notes:{1:'keep rejected note'}}});await app.finish();
+ assert.equal(app.view.review.ignoredIndices.has(0),true);assert.equal(app.view.review.visible.some(s=>s.index===0),false);
+ assert.equal(app.controller.getSnapshot().active.record.state.reviewRecords[1].reason,'old reason');
+ await act(async()=>app.view.review.restore(0));await app.finish();
+ assert.equal(app.view.review.visible.some(s=>s.index===0),true);assert.equal(app.view.review.visible.some(s=>s.index===1),false);
+ assert.deepEqual(app.controller.getSnapshot().active.record.state.reviewRecords,{});assert.equal(app.controller.getSnapshot().active.record.state.notes[1],'keep rejected note');
+ assert.equal(app.controller.getSnapshot().active.record.state.reviewHistory.at(-1).rowIndex,1);
 });

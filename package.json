@@ -21,6 +21,7 @@
     "runtime:prepare": "python3 scripts/prepare-audio-runtime.py",
     "runtime:check": "python3 scripts/prepare-audio-runtime.py --check",
     "test:audio": "node scripts/verify-audio-runtime.mjs",
+    "test:inputs": "node scripts/verify-wandas-inputs.mjs",
     "e2e:scale": "OVERLAP_E2E_SCALE=1 playwright test tests/e2e/scale.spec.ts tests/e2e/reference-disk-scale.spec.ts"
   },
   "dependencies": {

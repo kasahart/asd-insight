@@ -1,0 +1,59 @@
+name: Validate candidate runtime
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Read pinned upstream commit
+        id: upstream
+        run: python3 -c 'import json,os; lock=json.load(open("runtime/lock.json")); open(os.environ["GITHUB_OUTPUT"],"a").write("commit="+lock["upstreamCommit"]+"\nexperimental="+str(lock.get("experimental",False)).lower()+"\n")'
+      - uses: actions/checkout@v6
+        with:
+          repository: kasahart/wandas
+          ref: ${{ steps.upstream.outputs.commit }}
+          path: .candidate/wandas
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+          cache: npm
+      - run: npm ci
+      - name: Reproduce experimental wheel
+        if: steps.upstream.outputs.experimental == 'true'
+        run: python3 scripts/build-candidate-wandas.py --source .candidate/wandas
+      - run: npm run runtime:prepare
+      - run: npm run typecheck && npm run lint && npm test
+      - run: npm run test:audio && npm run test:inputs
+      - run: npx playwright install --with-deps chromium
+      - name: Headless browser regressions
+        run: npm run e2e
+        env:
+          CI: '1'
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-failure-evidence
+          path: |
+            test-results/
+            playwright-report/
+  released-runtime:
+    name: Released runtime dependency gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Require published Wandas dependency before merge
+        run: |
+          python3 - <<'PY'
+          import json
+          lock = json.load(open('runtime/lock.json'))
+          if lock.get('experimental') or any(a['url'].startswith('local-build:') for a in lock['assets']):
+              raise SystemExit('BLOCKED: merge/release Wandas API upstream first, then pin its published wheel and rerun validation. Candidate validation does not make this runtime releasable.')
+          PY

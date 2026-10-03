@@ -5,3 +5,5 @@ playwright-report/
 runtime/prepared/
 .DS_Store
 tests/fixtures/generated/
+
+.candidate/

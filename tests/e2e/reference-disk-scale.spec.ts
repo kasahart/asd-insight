@@ -14,5 +14,5 @@ test('opt-in: 実ディスク100,001 WAV / 404MBの軽量保存・再開・末�
     throw new Error(
       'Set OVERLAP_E2E_DISK_FIXTURE to a generated 100001-file fixture directory',
     );
-  await referenceDiskWorkflow(page, testInfo, root, 100001, true);
+  await referenceDiskWorkflow(page, testInfo, root, 100001, true, true, true);
 });

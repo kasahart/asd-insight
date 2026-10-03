@@ -69,7 +69,7 @@ const stubs = {
   './ui/button':
     'import React from "react"; export const Button = ({children,...props}) => React.createElement("button",props,children);',
   'lucide-react':
-    'export const AudioLines = () => null; export const BookOpen = AudioLines; export const Database = AudioLines; export const Download = AudioLines; export const ShieldCheck = AudioLines; export const FileUp = AudioLines; export const FlaskConical = AudioLines; export const X = AudioLines; export const Trash2 = AudioLines;',
+    'export const AudioLines = () => null; export const BookOpen = AudioLines; export const Database = AudioLines; export const Download = AudioLines; export const ShieldCheck = AudioLines; export const FileUp = AudioLines; export const FlaskConical = AudioLines; export const X = AudioLines; export const Trash2 = AudioLines; export const ChevronDownIcon = AudioLines;',
 };
 
 let components;

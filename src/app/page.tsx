@@ -1,5 +1,7 @@
 'use client';
 
+import { audioPopulation } from '@domain/audio-population';
+import { AudioPopulationNotice } from '@/components/audio-population-notice';
 import { datasetRows } from '@domain/dataset-rows';
 import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import {
@@ -28,7 +30,7 @@ import {
 } from '@/components/context-inspector';
 import { ContextWorkbench } from '@/components/context-workbench';
 import { EvaluationSettings } from '@/components/evaluation-settings';
-import { addAudioAttachments } from '@/lib/audio-attachments';
+import { addAudioAttachments, prepareAudioAttachments, type AudioAttachmentPreview } from '@/lib/audio-attachments';
 import { readWavDirectory } from '@/lib/read-wav-directory';
 import {
   MAX_FOLDER_LEVELS,
@@ -72,7 +74,6 @@ import {
 import type { Dataset } from '@/lib/demo';
 import {
   csvText,
-  audioFileKey,
   defaultGroup,
   findAudio,
   resolveAudio,
@@ -165,7 +166,7 @@ export function buildAnalysisReport(input: AnalysisReportInput) {
     : null;
   return {
     application: 'ASD Insight',
-    version: 6,
+    version: 7,
     createdAt,
     analysis: {
       id: record.id,
@@ -177,6 +178,23 @@ export function buildAnalysisReport(input: AnalysisReportInput) {
       name: data.name,
       demo: data.demo,
       rowCount: data.rows.length,
+      ...(!data.demo ? { audioPopulation: {
+        version: 1,
+        policy: review.audioPopulation.policy,
+        signature: review.audioPopulation.signature,
+        signatureAlgorithm: 'fnv1a32-pair-utf16-v1',
+        identityBoundary: 'Selected relative paths and original CSV row positions; not a cryptographic audio-content identity',
+        inventoryCount: review.audioPopulation.inventory.length,
+        adoptedCount: review.audioPopulation.adopted.size,
+        withoutAttributesCount: review.audioPopulation.inventory.length - review.audioPopulation.adopted.size,
+        inventoryColumns: ['audioKey', 'rowIndex'],
+        inventory: review.audioPopulation.inventory.map(({ key, rowIndex }) => [key, rowIndex ?? null]),
+        excludedRows: {
+          missing: review.audioPopulation.missing.map(({ index }) => index),
+          ambiguous: review.audioPopulation.ambiguous.map(({ index, candidates }) => ({ rowIndex: index, candidates })),
+          duplicate: review.audioPopulation.duplicates.map(({ index, adoptedIndex, key }) => ({ rowIndex: index, adoptedRowIndex: adoptedIndex, audioKey: key })),
+        },
+      } } : {}),
       datasetVersionId: record.datasetVersionId,
       // datasetHash is the logical parsed-dataset hash.  A source asset hash,
       // when available, is kept separately so the two identities are clear.
@@ -253,6 +271,7 @@ export function buildAnalysisReport(input: AnalysisReportInput) {
         scoreMissingA: comparison.value.missingA,
         scoreMissingB: comparison.value.missingB,
         manual: comparison.value.ignoredRows,
+        audio: data.demo ? 0 : review.audioPopulation.excludedIndices.length,
       },
     },
     histogram: d.bins,
@@ -618,12 +637,10 @@ function DiagnosticsWorkspace() {
   const audioImportRequest = useRef(0);
   const audioDragDepth = useRef(0);
   const [audioDragging, setAudioDragging] = useState(false);
-  const [pendingAudio, setPendingAudio] = useState<{
-    incoming: File[];
-    files: Map<string, File>;
-    duplicates: string[];
-    changed: number[];
-  } | null>(null);
+  const [pendingAudio, setPendingAudio] = useState<AudioAttachmentPreview | null>(null);
+  const [checkingAudio, setCheckingAudio] = useState(false);
+  const audioCheck = useRef<AbortController | null>(null);
+  useEffect(() => () => { audioImportRequest.current++; audioCheck.current?.abort(); }, []);
   const previewAudit = useMemo(
     () =>
       pendingAudio
@@ -674,9 +691,9 @@ function DiagnosticsWorkspace() {
         }),
       },
       {
-        title: '重複する相対パス',
-        count: pendingAudio.duplicates.length,
-        values: previewItems(pendingAudio.duplicates),
+        title: '追加できない音源',
+        count: pendingAudio.conflicts.length,
+        values: previewItems(pendingAudio.conflicts),
       },
       {
         title: '既存の対応が変わる行',
@@ -885,61 +902,45 @@ function DiagnosticsWorkspace() {
     }
   }
   function beginAudioImport(clearPreview = true) {
+    audioCheck.current?.abort();
+    audioCheck.current = null;
+    setCheckingAudio(false);
     const request = ++audioImportRequest.current;
-    if (clearPreview) {
-      setPendingAudio(null);
-      setMessage(null);
-    }
+    if (clearPreview) { setPendingAudio(null); setMessage(null); }
     return request;
   }
-  function previewAudio(files: Iterable<File>, request: number) {
+  function cancelAudioImport() {
+    beginAudioImport();
+  }
+  async function previewAudio(files: Iterable<File>, request: number) {
     if (request !== audioImportRequest.current) return;
     if (!audioColumn && !idColumn) {
-      setMessage({
-        error: true,
-        text: '先に音声のファイル名・パス列を選択してください。',
+      setMessage({ error: true, text: '先に音声のファイル名・パス列を選択してください。' });
+      return;
+    }
+    const check = new AbortController();
+    audioCheck.current = check;
+    const existing = audioFiles;
+    setCheckingAudio(true);
+    try {
+      const preview = await prepareAudioAttachments(existing, files, check.signal, {
+        rows: sourceData.rows,
+        resolve: (row, index, map) => findAudio(row, index, idColumn, audioColumn, map),
       });
-      return;
+      const current = controller.getSnapshot().active;
+      const currentAudioColumn = current?.record.state.audioColumn;
+      const currentIdColumn = current?.record.state.idColumn;
+      if (request !== audioImportRequest.current || current?.audioFiles !== existing || current.dataset !== sourceData || sourceColumnSelection(sourceData.columns, typeof currentAudioColumn === 'string' ? currentAudioColumn : '') !== audioColumn || sourceColumnSelection(sourceData.columns, typeof currentIdColumn === 'string' ? currentIdColumn : '') !== idColumn) return;
+      const candidateLevels = folderAttributeCandidates(preview.files);
+      if (candidateLevels.length > MAX_FOLDER_LEVELS) throw new Error(`WAVフォルダ階層は${MAX_FOLDER_LEVELS}階層まで分析条件に追加できます。今回のフォルダは${candidateLevels.length}階層あるため、取り込めません。`);
+      setPendingAudio(preview);
+      setMessage(null);
+    } catch (error) {
+      if (request !== audioImportRequest.current || check.signal.aborted) return;
+      setMessage({ error: true, text: error instanceof Error ? error.message : '音声を確認できませんでした。' });
+    } finally {
+      if (request === audioImportRequest.current) { setCheckingAudio(false); audioCheck.current = null; }
     }
-    const incoming: File[] = [];
-    const map = new Map(audioFiles);
-    const duplicates: string[] = [];
-    for (const file of files) {
-      if (!/\.wav$/i.test(file.name)) continue;
-      incoming.push(file);
-      const key = audioFileKey(file);
-      if (map.has(key)) duplicates.push(key);
-      else {
-        map.set(key, file);
-
-      }
-    }
-    if (!incoming.length) {
-      setMessage({ error: true, text: '選択したフォルダにWAVがありません。' });
-      return;
-    }
-    const candidateLevels = folderAttributeCandidates(map);
-    if (candidateLevels.length > MAX_FOLDER_LEVELS) {
-      setMessage({
-        error: true,
-        text: `WAVフォルダ階層は${MAX_FOLDER_LEVELS}階層まで分析条件に追加できます。今回のフォルダは${candidateLevels.length}階層あるため、取り込めません。`,
-      });
-      return;
-    }
-    const changed = sourceData.rows.flatMap((row, index) => {
-      const previous = findAudio(row, index, idColumn, audioColumn, audioFiles);
-      return previous &&
-        findAudio(row, index, idColumn, audioColumn, map) !== previous
-        ? [index + 1]
-        : [];
-    });
-    setPendingAudio({
-      incoming,
-      files: map,
-      duplicates,
-      changed,
-    });
-    setMessage(null);
   }
   async function chooseAudioFolder() {
     const request = beginAudioImport(false);
@@ -959,11 +960,13 @@ function DiagnosticsWorkspace() {
       if (request !== audioImportRequest.current) return;
       setPendingAudio(null);
       setMessage(null);
-      const files = await readWavDirectory(directory);
-      previewAudio(files, request);
+      const scan = new AbortController(); audioCheck.current = scan; setCheckingAudio(true);
+      const files = await readWavDirectory(directory, scan.signal);
+      await previewAudio(files, request);
     } catch (error) {
       if (request !== audioImportRequest.current) return;
       if (error instanceof DOMException && error.name === 'AbortError') return;
+      setCheckingAudio(false);
       setPendingAudio(null);
       setMessage({
         error: true,
@@ -1009,10 +1012,12 @@ function DiagnosticsWorkspace() {
         if (request !== audioImportRequest.current) return;
         if (directories.length !== 1 || items.length !== 1)
           throw new Error('WAVフォルダを1つドロップしてください。');
-        const files = await readWavDirectory(directories[0]);
-        previewAudio(files, request);
+        const scan = new AbortController(); audioCheck.current = scan; setCheckingAudio(true);
+        const files = await readWavDirectory(directories[0], scan.signal);
+        await previewAudio(files, request);
       } catch (error) {
         if (request !== audioImportRequest.current) return;
+        setCheckingAudio(false);
         setPendingAudio(null);
         setMessage({
           error: true,
@@ -1024,8 +1029,11 @@ function DiagnosticsWorkspace() {
       }
     })();
   }
+  const confirmedAudio = useRef<AudioAttachmentPreview | null>(null);
   function attachAudio() {
-    if (!pendingAudio) return;
+    if (!pendingAudio || checkingAudio || pendingAudio.conflicts.length || pendingAudio.changed.length) return;
+    if (confirmedAudio.current === pendingAudio) return;
+    confirmedAudio.current = pendingAudio;
     let map: Map<string, File>;
     try {
       map = addAudioAttachments(audioFiles, pendingAudio.incoming, {
@@ -1033,8 +1041,9 @@ function DiagnosticsWorkspace() {
         resolve: (row, index, files) =>
           findAudio(row, index, idColumn, audioColumn, files),
       });
-      setAudioFiles(map);
+      if (pendingAudio.incoming.length) setAudioFiles(map);
     } catch (error) {
+      confirmedAudio.current = null;
       setMessage({
         error: true,
         text:
@@ -1049,23 +1058,13 @@ function DiagnosticsWorkspace() {
         .slice(0, MAX_FOLDER_LEVELS)
         .map(({ level }) => level),
     );
-    setPendingAudio(null);
-    const matched = auditAudioMatches(
-      sourceData,
-      idColumn,
-      audioColumn,
-      map,
-    ).matched;
+    const retainedCount = pendingAudio.retained.length;
+    const addedCount = pendingAudio.incoming.length;
+    beginAudioImport();
+    const joined = audioPopulation(sourceData, idColumn, audioColumn, map);
     setMessage({
-      error: false,
-      text:
-        map.size +
-        'ファイルを追加、' +
-        matched +
-        '行に対応しました。' +
-        (data.demo
-          ? '実音声を使うときは、先にCSVを読み込んでください。'
-          : 'サーバーへの送信はしていません。'),
+      error: !!(joined.missing.length || joined.ambiguous.length),
+      text: `${addedCount}音源を追加し、内容一致${retainedCount}音源は既存のまま保持しました（全${map.size}音源）。メモ・手動除外・設定を保持しています。CSV属性を採用した解析対象候補は${joined.adopted.size}音源です。未対応${joined.missing.length}行・曖昧${joined.ambiguous.length}行・重複非採用${joined.duplicates.length}行は解析に含めません。サーバーへの送信はしていません。`,
     });
   }
   function chooseRange(r: ScoreRange) {
@@ -1156,7 +1155,7 @@ function DiagnosticsWorkspace() {
         hidden
         onChange={(e) => {
           if (e.target.files)
-            previewAudio(e.target.files, beginAudioImport());
+            void previewAudio(e.target.files, beginAudioImport());
           e.target.value = '';
         }}
       />
@@ -1188,6 +1187,71 @@ function DiagnosticsWorkspace() {
           </Button>
         </div>
       )}
+      {!sourceData.demo && <section className="audio-import-preview" aria-label="解析入力の準備">
+        <h2>音源とCSV属性を確認して解析</h2>
+        <p>{audioFiles.size ? '音源を追加・再選択できます。同じ相対パスは内容一致を確認して保持し、不足分だけ補います。異なる内容や既存の対応変更は拒否します。' : '次の操作：WAVフォルダを選択してください。元CSVは確認済みです。音源が対応してから解析します。'}</p>
+        <Button disabled={checkingAudio || !!operation} onClick={() => { controller.setState('disclosures', (previous: unknown) => ({ ...(previous as Record<string, boolean>), 'dataset.mapping': true }), {}); void chooseAudioFolder(); }}>WAVフォルダを選択</Button>
+        {checkingAudio && <output>既存の同じ相対パスの音源を全バイト比較しています。大規模な再選択は時間がかかります。<Button variant="outline" onClick={cancelAudioImport}>音源の確認を取り消す</Button></output>}
+                    {pendingAudio && previewAudit && (
+                      <section
+                        className="audio-import-preview"
+                        aria-label="音声の取り込み前確認"
+                      >
+                        <h3>取り込み前の確認</h3>
+                        <p>音声本体 {(Array.from(new Set(pendingAudio.files.values())).reduce((sum, file) => sum + file.size, 0) / 1024 ** 2).toFixed(1)} MiB。
+                          全量保存はCSV・調査状態も含め1分析{policy.maxBundleMiB} MiB、保存全体{policy.maxTotalMiB} MiBまでです。
+                          {active!.record.audioReferences !== undefined ? ' この分析は軽量保存です。音声本体を複製せず、再開時に選び直します。' : ' 大容量音声には軽量保存を選んでください。'}</p>
+                        {active!.record.audioReferences === undefined && active!.source && <Button variant="outline" disabled={!!operation} onClick={() => void controller.saveAsReference().catch(error => setMessage({ error: true, text: error instanceof Error ? error.message : '軽量保存できません。' }))}>現在の調査を軽量保存にコピー</Button>}
+                        <p>
+                          {pendingAudio.incoming.length + pendingAudio.retained.length + pendingAudio.conflicts.length}件のWAVを選択。新規{pendingAudio.incoming.length}件・内容一致で保持{pendingAudio.retained.length}件・競合{pendingAudio.conflicts.length}件。対応{' '}
+                          {previewAudit.matched}行、未対応{' '}
+                          {previewAudit.missing.length}行、曖昧{' '}
+                          {previewAudit.ambiguous.length}行、未参照{' '}
+                          {previewAudit.unused.length}件、重複参照{' '}
+                          {previewAudit.repeated.length}件。
+                        </p>
+                        {audioPreviewSections.map(
+                          ({ title, count, values }) => (
+                            <details key={title}>
+                              <summary>
+                                {title}（{count}）
+                              </summary>
+                              <ul>
+                                {values.map((value, index) => (
+                                  <li key={`${index}-${value}`}>{value}</li>
+                                ))}
+                              </ul>
+                              {count > values.length && (
+                                <p>
+                                  先頭{values.length}件を表示（全{count}件）
+                                </p>
+                              )}
+                            </details>
+                          ),
+                        )}
+                        <div className="audio-import-actions">
+                          <Button
+                            onClick={attachAudio}
+                            disabled={
+                              !!(
+                                checkingAudio || pendingAudio.conflicts.length ||
+                                pendingAudio.changed.length
+                              )
+                            }
+                          >
+                            確認して追加
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={cancelAudioImport}
+                          >
+                            取り消す
+                          </Button>
+                        </div>
+                      </section>
+                    )}
+      </section>}
+      <AudioPopulationNotice dataset={sourceData} idColumn={idColumn} audioColumn={audioColumn} files={audioFiles} notes={notes} downloads={policy.downloads} />
       <div className="workspace" inert={!!operation}>
         <SampleReviewWorkspace
           dataset={data}
@@ -1236,6 +1300,7 @@ function DiagnosticsWorkspace() {
             const selectedAudioFile = selectedAudioResolution?.file;
             return (
               <>
+
                 <aside
                   className="control-panel"
                   id="comparison-settings"
@@ -1244,6 +1309,7 @@ function DiagnosticsWorkspace() {
                   <div className="panel-heading">
                     <h2>評価条件</h2>
                   </div>
+                {!data.demo && <p aria-label="音源の指標対象件数">指標対象 {review.calculationTotal === null ? "計算待ち" : `${review.calculationTotal.toLocaleString()}音源`}。音源ごとに採用したCSV属性だけを使います。{review.workerResult && `スコア欠測 ${review.workerResult.comparison.missingA + review.workerResult.comparison.missingB}件、比較群欠測 ${review.workerResult.comparison.missingGroup}件、指定群の対象外 ${review.workerResult.comparison.otherGroup}件、条件外 ${review.workerResult.comparison.outsideFilter}件、手動除外 ${review.workerResult.comparison.ignoredRows}件。`}</p>}
                   <div className="field">
                     <label htmlFor="score">評価する異常度の列</label>
                     <NativeSelect
@@ -1429,7 +1495,7 @@ function DiagnosticsWorkspace() {
                     className="mapping-details divided"
                     id="dataset-mapping-details"
                   >
-                    <summary id="dataset-mapping-summary">試聴音声</summary>
+                    <summary id="dataset-mapping-summary">音源の対応設定・取り込み確認</summary>
                     <div className="field">
                       <label htmlFor="audio-column">
                         音声のファイル名・パス列
@@ -1437,7 +1503,7 @@ function DiagnosticsWorkspace() {
                       <NativeSelect
                         id="audio-column"
                         value={audioColumn}
-                        onChange={(e) => setAudioColumn(e.target.value)}
+                        onChange={(e) => { beginAudioImport(); try { setAudioColumn(e.target.value); } catch (error) { setMessage({error: true, text: error instanceof Error ? error.message : "対応列を変更できません。"}); } }}
                       >
                         <option value="">音声列を選択してください</option>
                         {sourceData.columns.map((c) => (
@@ -1453,14 +1519,7 @@ function DiagnosticsWorkspace() {
                           ? '合成音を使用中'
                           : `原音対応 ${audioMatchCount.toLocaleString()} / ${data.rows.length.toLocaleString()}件`}
                       </p>
-                      {!data.demo && (
-                        <Button
-                          variant="outline"
-                          onClick={() => void chooseAudioFolder()}
-                        >
-                          WAVフォルダを選択
-                        </Button>
-                      )}
+
                     </div>
                     {!data.demo && (
                       <button
@@ -1491,65 +1550,6 @@ function DiagnosticsWorkspace() {
                       >
                         WAVフォルダをここにドラッグ＆ドロップ
                       </button>
-                    )}
-                    {pendingAudio && previewAudit && (
-                      <section
-                        className="audio-import-preview"
-                        aria-label="音声の取り込み前確認"
-                      >
-                        <h3>取り込み前の確認</h3>
-                        <p>音声本体 {(Array.from(new Set(pendingAudio.files.values())).reduce((sum, file) => sum + file.size, 0) / 1024 ** 2).toFixed(1)} MiB。
-                          全量保存はCSV・調査状態も含め1分析{policy.maxBundleMiB} MiB、保存全体{policy.maxTotalMiB} MiBまでです。
-                          {active!.record.audioReferences !== undefined ? ' この分析は軽量保存です。音声本体を複製せず、再開時に選び直します。' : ' 大容量音声には軽量保存を選んでください。'}</p>
-                        {active!.record.audioReferences === undefined && active!.source && <Button variant="outline" disabled={!!operation} onClick={() => void controller.saveAsReference().catch(error => setMessage({ error: true, text: error instanceof Error ? error.message : '軽量保存できません。' }))}>現在の調査を軽量保存にコピー</Button>}
-                        <p>
-                          {pendingAudio.incoming.length}件のWAVを選択。対応{' '}
-                          {previewAudit.matched}行、未対応{' '}
-                          {previewAudit.missing.length}行、曖昧{' '}
-                          {previewAudit.ambiguous.length}行、未参照{' '}
-                          {previewAudit.unused.length}件、重複参照{' '}
-                          {previewAudit.repeated.length}件、相対パス重複{' '}
-                          {pendingAudio.duplicates.length}件。
-                        </p>
-                        {audioPreviewSections.map(
-                          ({ title, count, values }) => (
-                            <details key={title}>
-                              <summary>
-                                {title}（{count}）
-                              </summary>
-                              <ul>
-                                {values.map((value, index) => (
-                                  <li key={`${index}-${value}`}>{value}</li>
-                                ))}
-                              </ul>
-                              {count > values.length && (
-                                <p>
-                                  先頭{values.length}件を表示（全{count}件）
-                                </p>
-                              )}
-                            </details>
-                          ),
-                        )}
-                        <div className="audio-import-actions">
-                          <Button
-                            onClick={attachAudio}
-                            disabled={
-                              !!(
-                                pendingAudio.duplicates.length ||
-                                pendingAudio.changed.length
-                              )
-                            }
-                          >
-                            確認して追加
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() => setPendingAudio(null)}
-                          >
-                            取り消す
-                          </Button>
-                        </div>
-                      </section>
                     )}
                     {!!folderCandidates.length && (
                       <section

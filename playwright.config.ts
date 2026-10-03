@@ -51,6 +51,7 @@ export default defineConfig({
     ? [['line'], ['html', { outputFolder: 'playwright-report', open: 'never' }]]
     : 'list',
   use: {
+    headless: true,
     baseURL: `http://127.0.0.1:${port}`,
     locale: 'ja-JP',
     actionTimeout: 10_000,

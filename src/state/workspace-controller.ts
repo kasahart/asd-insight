@@ -159,6 +159,17 @@ export class WorkspaceController {
     const value = typeof update === 'function' ? update(previous) : update;
     if (Object.is(value, previous)) return;
     const state = { ...active.record.state, [key]: value };
+    if (key === 'idColumn' || key === 'audioColumn') {
+      const membership = inputMembership(active);
+      const before = active.record.state;
+      for (const rowIndex of Object.keys((before.reviewRecords ?? {}) as Record<string, unknown>).map(Number)) {
+        const row = active.dataset.rows[rowIndex];
+        const oldBinding = resolveAudio(row, rowIndex, typeof before.idColumn === 'string' ? before.idColumn : '', typeof before.audioColumn === 'string' ? before.audioColumn : '', membership).key;
+        const nextBinding = resolveAudio(row, rowIndex, typeof state.idColumn === 'string' ? state.idColumn : '', typeof state.audioColumn === 'string' ? state.audioColumn : '', membership).key;
+        if (!oldBinding || oldBinding !== nextBinding)
+          throw new Error(`元CSV ${rowIndex + 1}行目の手動除外が別の音源へ移るため、対応列を変更できません。元の対応を保つか、新しい分析として開始してください。`);
+      }
+    }
     if (key === 'idColumn' || key === 'audioColumn') delete state.audioAnalyses;
     validateApplicationState(
       state,
@@ -927,9 +938,11 @@ export function validateApplicationState(
     'audioAnalyses',
     'inspectorSelection',
     'adoptedFolderLevels',
+    'audioJoinPolicy',
   ];
   keys(state, allowed, '未対応の項目', ['schemaVersion']);
   if (state.schemaVersion !== 1) invalid('schemaVersion');
+  if (state.audioJoinPolicy !== undefined && state.audioJoinPolicy !== 'first-source-row-v1') invalid('audioJoinPolicy');
   if (state.rowCount !== undefined && state.rowCount !== rows)
     invalid('rowCount');
   const adopted = state.adoptedFolderLevels ?? [];

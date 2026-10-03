@@ -51,6 +51,7 @@ test('フォルダ読み取りAPIで相対パスを保持してWAVを取り込�
   }
   await start.click();
   const dialog = page.getByRole('dialog', { name: 'データと保存した分析' });
+  await dialog.getByRole('button', { name: 'CSV・TSV', exact: true }).click();
   await dialog.locator('input[type="file"][accept=".csv,.tsv"]').setInputFiles({
     name: 'picker.csv',
     mimeType: 'text/csv',
@@ -82,6 +83,7 @@ test('ドロップしたWAVフォルダを読み取り、取り込み前に対�
   }
   await start.click();
   const dialog = page.getByRole('dialog', { name: 'データと保存した分析' });
+  await dialog.getByRole('button', { name: 'CSV・TSV', exact: true }).click();
   await dialog.locator('input[type="file"][accept=".csv,.tsv"]').setInputFiles({
     name: 'dropped.csv',
     mimeType: 'text/csv',
@@ -181,6 +183,7 @@ test('階層WAVの自動属性化と一覧での対応状況', async ({ page }) 
     }
     await openData.click();
     const dialog = page.getByRole('dialog', { name: 'データと保存した分析' });
+  await dialog.getByRole('button', { name: 'CSV・TSV', exact: true }).click();
     await dialog
       .locator('input[type="file"][accept=".csv,.tsv"]')
       .setInputFiles({
@@ -255,30 +258,16 @@ test('階層WAVの自動属性化と一覧での対応状況', async ({ page }) 
     await expect(
       table.getByText('001.wav', { exact: true }).first(),
     ).toBeVisible();
-    const ambiguousIcon = table.locator(
-      '.sample-audio-status[title*="曖昧: 同名WAVが複数あります"]',
-    );
-    await expect(ambiguousIcon).toHaveCount(1);
-    await ambiguousIcon.hover();
-    const ambiguityReason = await ambiguousIcon.getAttribute('title');
-    expect(ambiguityReason).toBeTruthy();
-    expect(ambiguityReason ?? '').toContain('正常/設備A/001.wav');
-    expect(ambiguityReason ?? '').toContain('要確認/設備B/001.wav');
-    await expect(ambiguousIcon).toHaveAttribute('role', 'img');
-    await expect(ambiguousIcon).toHaveAttribute(
-      'aria-label',
-      /音声未対応: 曖昧: 同名WAVが複数あります/,
-    );
-    const missingIcon = table.locator(
-      '.sample-audio-status[title*="CSVの音声値「missing.wav」"]',
-    );
-    await expect(missingIcon).toHaveCount(1);
-    await missingIcon.hover();
-    await expect(missingIcon.locator('.sample-audio-icon')).toHaveAttribute(
-      'opacity',
-      '0.25',
-    );
-    await expect(table.getByText(/CSVの音声値「missing\.wav」/)).toHaveCount(0);
+    // Audio-primary populations keep unjoined CSV rows in diagnostics, not metrics/listing.
+    const notice = page.getByRole('region', { name: '音源とCSV属性の対応' });
+    await expect(notice).toContainText('音源未対応 1行、候補が曖昧 1行');
+    await notice.getByText('対象外の元CSV行（2行）', { exact: true }).click();
+    await expect(notice).toContainText('元CSV 2行目：音源候補が曖昧');
+    await expect(notice).toContainText('正常/設備A/001.wav');
+    await expect(notice).toContainText('要確認/設備B/001.wav');
+    await expect(notice).toContainText('元CSV 4行目：音源未対応');
+    await expect(table.locator('.sample-audio-status[title*="曖昧: 同名WAV"]')).toHaveCount(0);
+    await expect(table.locator('.sample-audio-status[title*="missing.wav"]')).toHaveCount(0);
     await table.getByRole('button', { name: /相対パス：.*昇順にする/ }).click();
     await expect(
       table.getByRole('columnheader', { name: /相対パス/ }),
@@ -291,7 +280,7 @@ test('階層WAVの自動属性化と一覧での対応状況', async ({ page }) 
     await search.fill('missing.wav');
     await expect(
       page.getByRole('heading', { name: /^サンプル一覧/ }),
-    ).toContainText('1件');
+    ).toContainText('0件');
     await search.fill('');
     if (persistent) {
       await expect(
@@ -342,6 +331,7 @@ test('2,000件を超えるWAVフォルダを取り込める', async ({
     }
     await openData.click();
     const dialog = page.getByRole('dialog', { name: 'データと保存した分析' });
+  await dialog.getByRole('button', { name: 'CSV・TSV', exact: true }).click();
     await dialog
       .locator('input[type="file"][accept=".csv,.tsv"]')
       .setInputFiles({
@@ -401,6 +391,7 @@ test('高カーディナリティの数値風フォルダ名は全てカテゴ�
     }
     await openData.click();
     const dialog = page.getByRole('dialog', { name: 'データと保存した分析' });
+  await dialog.getByRole('button', { name: 'CSV・TSV', exact: true }).click();
     await dialog
       .locator('input[type="file"][accept=".csv,.tsv"]')
       .setInputFiles({

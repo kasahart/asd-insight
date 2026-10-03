@@ -863,7 +863,7 @@ test('changing audio identity or bindings drops only stale audio metadata before
       sampleRate: 16_000,
       channels: 1,
       duration: 1,
-      recipe: { engine: 'wandas', engineVersion: '0.7.2', unit: 'dBFS' },
+      recipe: { engine: 'wandas', engineVersion: '0.8.1', unit: 'dBFS' },
       runtimeLockHash: 'a'.repeat(64),
       sourceName: 's1.wav',
       sourceHash: 'b'.repeat(64),
@@ -1068,4 +1068,17 @@ test('app persistent initialization failure never silently falls back to memory'
     view.unmount();
   });
   assert.equal(closes, 1);
+});
+
+
+test('changing the join column cannot silently move an existing manual exclusion to a different audio', async t => {
+ const repo=await createBrowserRepository({mode:'memory'});const controller=new WorkspaceController(repo,60000);t.after(()=>controller.dispose());
+ const entry=completeState().reviewRecords[0];
+ const dataset={name:'joins.csv',demo:false,columns:['sample_id','score','score2','group'],rows:[{sample_id:'s1',score:'1',score2:'1',group:'A'},{sample_id:'s2',score:'2',score2:'2',group:'B'}]};
+ await controller.create(input({dataset,state:{schemaVersion:1,rowCount:2,idColumn:'sample_id',audioColumn:'',reviewRecords:{0:entry},notes:{0:'keep'}}}));
+ const old=controller.getSnapshot().active.record.state;
+ assert.throws(()=>controller.setState('audioColumn','score'),/手動除外が別の音源/);
+ assert.throws(()=>controller.setState('idColumn','group'),/手動除外が別の音源/);
+ assert.deepEqual(controller.getSnapshot().active.record.state,old);
+ controller.setState('audioColumn','sample_id');assert.deepEqual(controller.getSnapshot().active.record.state.reviewRecords,old.reviewRecords);
 });

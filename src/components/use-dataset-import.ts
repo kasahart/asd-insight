@@ -129,5 +129,6 @@ export function useDatasetImport() {
     [run],
   );
 
-  return { csvCandidate, busy, error, readCSV, cancel };
+  const reset = useCallback(() => { cancel(); setCsvCandidate(null); }, [cancel]);
+  return { csvCandidate, busy, error, readCSV, cancel, reset };
 }

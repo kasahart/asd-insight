@@ -353,7 +353,7 @@ test('使い方ページの画像とGIF参照が実ブラウザで読み込め�
   ).toBeVisible();
 
   const images = page.locator('img');
-  await expect(images).toHaveCount(10);
+  await expect(images).toHaveCount(9);
   await expect
     .poll(
       () =>
@@ -375,7 +375,10 @@ test('使い方ページの画像とGIF参照が実ブラウザで読み込め�
       source: node.querySelector('img')?.getAttribute('src'),
     })),
   );
-  expect(references.length).toBe(10);
+  expect(references.length).toBe(9);
+  expect(
+    references.some(({ source }) => source === './assets/01-audio-review.png'),
+  ).toBe(true);
   expect(references.every(({ href, source }) => href && source)).toBe(true);
   expect(
     references.filter(({ href }) => href?.toLowerCase().endsWith('.gif'))

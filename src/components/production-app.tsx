@@ -113,7 +113,7 @@ function ReadyApplication({ controller, policy, children }: { controller: Worksp
   }, [controller]);
   return <WorkspaceContext.Provider value={{ controller, policy, openManager }}>
     <ViewPreferencesProvider key={snapshot.active?.record.id ?? 'welcome'}>
-      {snapshot.active ? children : <div className="lab-shell dark"><header className="app-header"><strong>ASD Insight</strong><div className="startup-header-actions"><ManualLink /><span><ShieldCheck size={14}/> 端末内で処理</span></div></header><main className="startup-state"><Database size={30}/><h1>分析するデータを選ぶ</h1><p>CSV・TSVを開くか、このブラウザーに保存した分析を再開できます。</p><Button onClick={openManager}>データを選ぶ</Button><p className="storage-note">データと音声を外部へ送信しません。同じブラウザープロファイルの利用者は保存した分析を開けます。</p></main></div>}
+      {snapshot.active ? children : <div className="lab-shell dark"><header className="app-header"><strong>ASD Insight</strong><div className="startup-header-actions"><ManualLink /><span><ShieldCheck size={14}/> 端末内で処理</span></div></header><main className="startup-state"><Database size={30}/><h1>分析するデータを選ぶ</h1><p>WAV音源を選び、CSVから属性を付けて解析します。保存した分析の再開もできます。</p><Button onClick={openManager}>データを選ぶ</Button><p className="storage-note">データと音声を外部へ送信しません。同じブラウザープロファイルの利用者は保存した分析を開けます。</p></main></div>}
       <SessionManager open={managerOpen} onClose={() => setManagerOpen(false)}/>
     </ViewPreferencesProvider>
   </WorkspaceContext.Provider>;
@@ -168,7 +168,7 @@ export function WorkspaceActions() {
       {policy.downloads && <Button variant="outline" disabled={!active || working} onClick={() => void backup()}><Download size={14}/>バックアップ</Button>}
       <Button variant="outline" onClick={openManager}><Database size={14}/>データを選ぶ</Button>
     </div>
-    {active?.record.audioReferences !== undefined && <output className="save-notification"><span>軽量保存：CSV・音声本体は含まれません。再開時は元CSVを選び直します。{missing > 0 ? `音声${missing.toLocaleString()}件は未選択です。WAVフォルダを選び直すと再生できます。CSVの集計・調査状態は保持しています。` : '音声の再開時照合はパス・容量・更新日時で行い、内容の完全一致は保証しません。'}</span></output>}
+    {active?.record.audioReferences !== undefined && <output className="save-notification"><span>軽量保存：CSV・音声本体は含まれません。再開時は元CSVを選び直します。{missing > 0 ? `音声${missing.toLocaleString()}件は未選択です。WAVフォルダを選び直すと再生できます。音源再指定まで集計は行いません。調査状態は保持しています。` : '音声の再開時照合はパス・容量・更新日時で行い、内容の完全一致は保証しません。'}</span></output>}
     {(error || message) && <div className="save-notification" role={error ? 'alert' : 'status'}>
       <span>{[error, message].filter(Boolean).join(' ' )}</span>
       {error && !conflict && <Button variant="outline" size="sm" onClick={() => void controller.flush().catch(() => {})}>保存を再試行</Button>}
