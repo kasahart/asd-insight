@@ -71,3 +71,18 @@ npm run e2e
 ## ライセンス
 
 このリポジトリにはライセンスを付与していません。利用・再配布についてはリポジトリ所有者に確認してください。音声ランタイムの依存コンポーネントには個別の上流ライセンスが適用されます。
+
+### Shared spectrogram GUI kernel
+
+`packages/wandas-gui-core` is a private, dependency-free source snapshot of
+`audio-wandas-analyzer/src/shared/gui-core`. `upstream.json` pins its commit and
+SHA-256 hashes; build rejects an edited snapshot. Update both files together with
+`node scripts/sync-gui-core.mjs --from <Analyzer checkout>/src/shared/gui-core`
+after committing the canonical package. No npm publication or Git submodule is required.
+
+`src/lib/spectrogram-display.ts` keeps Insight's size limits, kHz controls, dBFS
+reference, frequency/time interval selection, calculation floor, and legacy boundary
+arithmetic. The shared kernel performs pooling and palette conversion. The React
+chart retains resize/playhead/keyboard/accessibility behavior. Physical-axis and
+boundary corrections from the standalone prototype are deliberately not part of
+this stage; they require a separate rendering-contract change.

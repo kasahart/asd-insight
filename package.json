@@ -13,7 +13,7 @@
     "test": "node --test tests/production/*.test.mjs",
     "lint": "oxlint src packages",
     "predev": "npm run runtime:check && node scripts/prepare-static.mjs",
-    "prebuild": "npm run runtime:check && node scripts/prepare-static.mjs",
+    "prebuild": "npm run gui-core:check && npm run runtime:check && node scripts/prepare-static.mjs",
     "test:reference": "node tests/production/evaluation-reference.test.mjs",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui",
@@ -22,7 +22,8 @@
     "runtime:check": "python3 scripts/prepare-audio-runtime.py --check",
     "test:audio": "node scripts/verify-audio-runtime.mjs",
     "test:inputs": "node scripts/verify-wandas-inputs.mjs",
-    "e2e:scale": "OVERLAP_E2E_SCALE=1 playwright test tests/e2e/scale.spec.ts tests/e2e/reference-disk-scale.spec.ts"
+    "e2e:scale": "OVERLAP_E2E_SCALE=1 playwright test tests/e2e/scale.spec.ts tests/e2e/reference-disk-scale.spec.ts",
+    "gui-core:check": "node scripts/sync-gui-core.mjs --check"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",
