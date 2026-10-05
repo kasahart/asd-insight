@@ -30,10 +30,23 @@ if (process.argv.includes('--check')) {
     throw new Error(
       'Use --check or --from <Analyzer checkout>/src/shared/gui-core',
     );
-  const source = resolve(process.argv[flag + 1]),
-    commit = execFileSync('git', ['-C', source, 'rev-parse', 'HEAD'], {
-      encoding: 'utf8',
-    }).trim();
+  const source = resolve(process.argv[flag + 1]);
+  const git = (...args) => execFileSync('git', ['-C', source, ...args]);
+  if (
+    git('rev-parse', '--show-prefix').toString().trim() !==
+    'src/shared/gui-core/'
+  )
+    throw new Error(
+      'Source must be the canonical src/shared/gui-core directory',
+    );
+  const origin = git('remote', 'get-url', 'origin').toString().trim();
+  if (
+    !/^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)kasahart\/audio-wandas-analyzer(?:\.git)?\/?$/.test(
+      origin,
+    )
+  )
+    throw new Error('Source origin must be kasahart/audio-wandas-analyzer');
+  const commit = git('rev-parse', 'HEAD').toString().trim();
   if (
     execFileSync(
       'git',
@@ -45,7 +58,7 @@ if (process.argv.includes('--check')) {
   const sha256 = {};
   mkdirSync(destination, { recursive: true });
   for (const file of files) {
-    const bytes = readFileSync(source + '/' + file);
+    const bytes = git('show', `${commit}:src/shared/gui-core/${file}`);
     writeFileSync(destination + file, bytes);
     sha256[file] = hash(bytes);
   }

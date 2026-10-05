@@ -86,3 +86,10 @@ arithmetic. The shared kernel performs pooling and palette conversion. The React
 chart retains resize/playhead/keyboard/accessibility behavior. Physical-axis and
 boundary corrections from the standalone prototype are deliberately not part of
 this stage; they require a separate rendering-contract change.
+
+The pin may name the reviewed Analyzer PR head while that PR is unmerged.
+Insight builds use the complete checked-in source and hashes; they do not fetch
+that commit at runtime or build time. Keep the Analyzer source branch until both
+changes are integrated, and re-pin Insight to the merged Analyzer commit after
+squash/rebase merges. Sync validates the canonical directory and repository
+origin and reads committed Git blobs, avoiding checkout line-ending filters.

@@ -10,7 +10,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/production/*.test.mjs",
+    "test": "npm run gui-core:check && node --test tests/production/*.test.mjs",
     "lint": "oxlint src packages",
     "predev": "npm run runtime:check && node scripts/prepare-static.mjs",
     "prebuild": "npm run gui-core:check && npm run runtime:check && node scripts/prepare-static.mjs",

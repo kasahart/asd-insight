@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
-import { pathToFileURL } from 'node:url';
-const root = new URL('../../', import.meta.url).pathname,
+import { pathToFileURL, fileURLToPath } from 'node:url';
+const root = fileURLToPath(new URL('../../', import.meta.url)),
   dir = await mkdtemp(root + '.gui-core-');
 async function bundle(entry, name) {
   const output = await build({
@@ -19,9 +19,13 @@ async function bundle(entry, name) {
   await writeFile(file, output.outputFiles[0].text);
   return import(pathToFileURL(file).href);
 }
-const shared = await bundle('src/lib/spectrogram-display.ts', 'shared'),
+let shared, legacy;
+try {
+  shared = await bundle('src/lib/spectrogram-display.ts', 'shared');
   legacy = await bundle('tests/fixtures/spectrogram-legacy.ts', 'legacy');
-await rm(dir, { recursive: true, force: true });
+} finally {
+  await rm(dir, { recursive: true, force: true });
+}
 function payload(columns, bins) {
   return {
     values: Float32Array.from({ length: columns * bins }, (_, k) =>
