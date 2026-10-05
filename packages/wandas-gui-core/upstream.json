@@ -1,9 +1,11 @@
 {
-  "repository": "kasahart/audio-wandas-analyzer",
-  "commit": "d18c472b8a6d585ec043952d464f3cd813be212a",
-  "path": "src/shared/gui-core",
+  "repository": "kasahart/wandas-gui",
+  "commit": "d885005508fb09b7caef74b41790cf887319bf18",
+  "path": "src",
   "sha256": {
     "index.ts": "5abb826e2200f0642316cfc52a8bcf2251bbcdb8d0fd67b02a0bfe0f7ecd0eaf",
-    "package.json": "925d9641fad4ed9cd498e5496e7db9022827011e4292b24d880fff6c4416927a"
-  }
+    "LICENSE.md": "f8142fbdf1eee63b74faa6c22c579b7b949e1e453de51562023e431e6b35de33",
+    "NOTICE.md": "cfeaa92df947f0c8289bcc90a3b607024718c3a728ce4d0b3cbe0c7a6eeb60f0"
+  },
+  "toolSha256": "695dd52a72e96752a655f15f45c4b3f7c250aa672e396f040c36123ee4c5c1cc"
 }
