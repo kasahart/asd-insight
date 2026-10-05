@@ -56,6 +56,27 @@ test('sync validates canonical provenance and reads committed blobs across filte
       bytes,
     );
     assert.equal(run('--check').status, 0);
+    copyFileSync(
+      fileURLToPath(new URL('../../.gitattributes', import.meta.url)),
+      join(consumer, '.gitattributes'),
+    );
+    const consumerGit = (...args) =>
+      execFileSync('git', ['-C', consumer, ...args], { encoding: 'utf8' });
+    consumerGit('init', '-q');
+    consumerGit('config', 'user.name', 'GUI core test');
+    consumerGit('config', 'user.email', 'gui-core-test@example.invalid');
+    consumerGit('config', 'commit.gpgsign', 'false');
+    consumerGit('config', 'core.autocrlf', 'true');
+    consumerGit('add', '.');
+    consumerGit('commit', '-qm', 'Consumer snapshot fixture');
+    rmSync(join(consumer, 'packages'), { recursive: true });
+    consumerGit('restore', 'packages');
+    assert.equal(
+      readFileSync(join(consumer, 'packages/wandas-gui-core/index.ts'), 'utf8'),
+      bytes,
+    );
+    assert.equal(run('--check').status, 0);
+
     writeFileSync(join(source, 'index.ts'), bytes + '// dirty\n');
     const dirty = run('--from', source);
     assert.notEqual(dirty.status, 0);
