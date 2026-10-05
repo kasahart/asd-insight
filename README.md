@@ -74,22 +74,24 @@ npm run e2e
 
 ## Shared spectrogram GUI kernel
 
-`packages/wandas-gui-core` is a private, dependency-free source snapshot of
-`audio-wandas-analyzer/src/shared/gui-core`. `upstream.json` pins its commit and
-SHA-256 hashes; build rejects an edited snapshot. Update both files together with
-`node scripts/sync-gui-core.mjs --from <Analyzer checkout>/src/shared/gui-core`
-after committing the canonical package. No npm publication or Git submodule is required.
+`packages/wandas-gui-core` is a commit/hash-pinned source snapshot of
+[kasahart/wandas-gui](https://github.com/kasahart/wandas-gui), with its MIT LICENSE
+and source-attribution NOTICE. The canonical synchronization tool is copied and
+hash-pinned alongside the source. Build and tests check all managed hashes offline.
 
-`src/lib/spectrogram-display.ts` keeps Insight's size limits, kHz controls, dBFS
-reference, frequency/time interval selection, calculation floor, and legacy boundary
-arithmetic. The shared kernel performs pooling and palette conversion. The React
-chart retains resize/playhead/keyboard/accessibility behavior. Physical-axis and
-boundary corrections from the standalone prototype are deliberately not part of
-this stage; they require a separate rendering-contract change.
+```sh
+node scripts/sync-gui-core.mjs --from <wandas-gui checkout> --into packages/wandas-gui-core
+npm test
+npm run build
+```
 
-The pin may name the reviewed Analyzer PR head while that PR is unmerged.
-Insight builds use the complete checked-in source and hashes; they do not fetch
-that commit at runtime or build time. Keep the Analyzer source branch until both
-changes are integrated, and re-pin Insight to the merged Analyzer commit after
-squash/rebase merges. Sync validates the canonical directory and repository
-origin and reads committed Git blobs, avoiding checkout line-ending filters.
+Sync reads committed Git blobs from a clean canonical checkout, validates its
+origin/root, and updates source, attribution, tool and provenance together.
+The local package manifest remains an Insight source-entry shim. No npm registry
+publication, Git submodule or new runtime dependency is needed. Shared tool tests
+live in the canonical repository; product raster/adapter regression tests remain here.
+
+`src/lib/spectrogram-display.ts` retains Insight's size limits, kHz controls, dBFS
+reference, floor and legacy time/frequency selection. React retains resize,
+playhead, keyboard and accessibility behavior. Physical-axis and boundary
+corrections remain a separate rendering-contract change.

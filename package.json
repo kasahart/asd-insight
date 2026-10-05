@@ -23,7 +23,7 @@
     "test:audio": "node scripts/verify-audio-runtime.mjs",
     "test:inputs": "node scripts/verify-wandas-inputs.mjs",
     "e2e:scale": "OVERLAP_E2E_SCALE=1 playwright test tests/e2e/scale.spec.ts tests/e2e/reference-disk-scale.spec.ts",
-    "gui-core:check": "node scripts/sync-gui-core.mjs --check"
+    "gui-core:check": "node scripts/sync-gui-core.mjs --check packages/wandas-gui-core"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",
