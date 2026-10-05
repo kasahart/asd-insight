@@ -72,7 +72,7 @@ npm run e2e
 
 このリポジトリにはライセンスを付与していません。利用・再配布についてはリポジトリ所有者に確認してください。音声ランタイムの依存コンポーネントには個別の上流ライセンスが適用されます。
 
-### Shared spectrogram GUI kernel
+## Shared spectrogram GUI kernel
 
 `packages/wandas-gui-core` is a private, dependency-free source snapshot of
 `audio-wandas-analyzer/src/shared/gui-core`. `upstream.json` pins its commit and

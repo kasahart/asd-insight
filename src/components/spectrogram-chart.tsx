@@ -10,10 +10,6 @@ import {
   type SpectrogramData,
 } from '@/lib/spectrogram';
 
-const DEFAULT_COLOR = {
-  min: SPECTROGRAM_DEFAULT_MIN_DB,
-  max: SPECTROGRAM_DEFAULT_MAX_DB,
-};
 import {
   spectrogramDisplayRanges,
   spectrogramColor,
@@ -26,6 +22,11 @@ export {
   spectrogramPixels,
   type SpectrogramDisplayOptions,
 } from '@/lib/spectrogram-display';
+
+const DEFAULT_COLOR = {
+  min: SPECTROGRAM_DEFAULT_MIN_DB,
+  max: SPECTROGRAM_DEFAULT_MAX_DB,
+};
 
 function formatTick(value: number): string {
   return Number(value.toPrecision(5)).toString();
