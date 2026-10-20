@@ -25,6 +25,12 @@ jobs:
           cache: npm
       - uses: actions/configure-pages@v5
       - run: npm ci
+      - name: Restore hash-locked runtime downloads
+        uses: actions/cache@v5
+        with:
+          path: runtime/prepared/runtime/audio
+          # Exact key only: a partial restore could publish assets the lock no longer lists.
+          key: audio-runtime-${{ hashFiles('runtime/lock.json', 'runtime/licenses/**', 'scripts/prepare-audio-runtime.py') }}
       - run: npm run runtime:prepare
       - run: npm run build
       - uses: actions/upload-pages-artifact@v4
