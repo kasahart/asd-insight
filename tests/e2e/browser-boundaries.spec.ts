@@ -348,16 +348,26 @@ test('320px keeps search, table scrolling, sorting, and score cells usable', asy
     .locator('tbody[aria-label="一覧の表示ページ"] tr')
     .first()
     .locator('.number-cell');
-  await firstScoreCell.scrollIntoViewIfNeeded();
+  // The visible rows can be re-rendered between locator actions, so scroll and
+  // read the first score cell as one retried step.
+  let ascendingFirst = Number.NaN;
+  await expect(async () => {
+    await firstScoreCell.scrollIntoViewIfNeeded({ timeout: 1_000 });
+    ascendingFirst = Number(await firstScoreCell.innerText({ timeout: 1_000 }));
+    expect(Number.isFinite(ascendingFirst)).toBe(true);
+  }).toPass();
   await expect(scoreHeader).toBeVisible();
   await scoreHeader.focus();
   await expect(scoreHeader).toBeFocused();
-  const ascendingFirst = Number(await firstScoreCell.innerText());
   await page.keyboard.press('Enter');
   await expect(scoreColumn).toHaveAttribute('aria-sort', 'descending');
-  await firstScoreCell.scrollIntoViewIfNeeded();
-  const descendingFirst = Number(await firstScoreCell.innerText());
-  expect(descendingFirst).toBeGreaterThan(ascendingFirst);
+  await expect(async () => {
+    await firstScoreCell.scrollIntoViewIfNeeded({ timeout: 1_000 });
+    const descendingFirst = Number(
+      await firstScoreCell.innerText({ timeout: 1_000 }),
+    );
+    expect(descendingFirst).toBeGreaterThan(ascendingFirst);
+  }).toPass();
 
   const unobscured = await page.evaluate(() => {
     const scoreCell = document
